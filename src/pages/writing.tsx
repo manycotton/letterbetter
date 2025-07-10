@@ -351,32 +351,43 @@ const Writing: React.FC = () => {
             const paragraphElement = parentElement.closest('.letterText');
             const paragraphIndex = parseInt(paragraphElement?.getAttribute('data-paragraph') || '0');
             
-            if (currentStep === 1 && !isUnderstandingCompleted) {
-              // 1단계: 이해하기 - 완료 전에는 연두색 하이라이트
-              const currentColor = highlightColors[colorIndex];
-              
-              const newItem: HighlightedItem = {
-                id: Date.now().toString(),
-                text: selectedText,
-                color: currentColor,
-                originalText: letterParagraphs[paragraphIndex],
-                paragraphIndex: paragraphIndex
-              };
-              
-              setHighlightedItems(prev => [...prev, newItem]);
-              
-            } else if ((currentStep === 1 && isUnderstandingCompleted) || 
-                      (currentStep === 2 && isUnderstandingCompleted && !isStrengthCompleted)) {
-              // 1단계 완료 후 또는 2단계: 강점찾기 - 하늘색 하이라이트
-              const newStrengthItem: StrengthItem = {
-                id: Date.now().toString(),
-                text: selectedText,
-                color: strengthColor,
-                originalText: letterParagraphs[paragraphIndex],
-                paragraphIndex: paragraphIndex
-              };
-              
-              setStrengthItems(prev => [...prev, newStrengthItem]);
+            // 하이라이트 로직 재구성
+            if (currentStep === 1) {
+              if (!isUnderstandingCompleted) {
+                // 이해하기 완료 전 -> 연두색 하이라이트
+                const currentColor = highlightColors[colorIndex];
+                const newItem: HighlightedItem = {
+                  id: Date.now().toString(),
+                  text: selectedText,
+                  color: currentColor,
+                  originalText: letterParagraphs[paragraphIndex],
+                  paragraphIndex: paragraphIndex
+                };
+                setHighlightedItems(prev => [...prev, newItem]);
+              } else {
+                // 이해하기 완료 후 -> 하늘색 하이라이트 (강점찾기 모드)
+                const newStrengthItem: StrengthItem = {
+                  id: Date.now().toString(),
+                  text: selectedText,
+                  color: strengthColor,
+                  originalText: letterParagraphs[paragraphIndex],
+                  paragraphIndex: paragraphIndex
+                };
+                setStrengthItems(prev => [...prev, newStrengthItem]);
+              }
+            } else if (currentStep === 2) {
+              if (!isStrengthCompleted) {
+                // 강점찾기 완료 전 -> 하늘색 하이라이트
+                const newStrengthItem: StrengthItem = {
+                  id: Date.now().toString(),
+                  text: selectedText,
+                  color: strengthColor,
+                  originalText: letterParagraphs[paragraphIndex],
+                  paragraphIndex: paragraphIndex
+                };
+                setStrengthItems(prev => [...prev, newStrengthItem]);
+              }
+              // 강점찾기 완료 후 -> 하이라이트 기능 중지 (아무것도 하지 않음)
             }
             
             // 질문 자동 생성 제거 - 사용자가 버튼을 눌러야 생성됨
