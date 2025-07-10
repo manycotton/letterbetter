@@ -404,7 +404,7 @@ const Writing: React.FC = () => {
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [colorIndex, highlightedItems]);
+  }, [colorIndex, highlightedItems, currentStep, isUnderstandingCompleted, isStrengthCompleted]);
 
 
   const removeHighlightedItem = (id: string) => {
