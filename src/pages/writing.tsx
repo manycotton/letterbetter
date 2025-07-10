@@ -30,6 +30,15 @@ interface HighlightedItem {
   userExplanation?: string;
 }
 
+interface StrengthItem {
+  id: string;
+  text: string;
+  color: string;
+  originalText: string;
+  paragraphIndex: number;
+  strengthDescription?: string;
+}
+
 interface AiSuggestion {
   text: string;
   category: string;
@@ -72,7 +81,7 @@ const Writing: React.FC = () => {
   const [letterContent, setLetterContent] = useState<string[]>([]);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [currentStep, setCurrentStep] = useState(1); // 현재 단계 (1: 이해하기, 2: 고민 정리하기, 3: 세번째 단계)
+  const [currentStep, setCurrentStep] = useState(1); // 현재 단계 (1: 이해하기, 2: 강점찾기, 3: 고민 정리하기, 4: 해결책 탐색)
   const [reflectionItems, setReflectionItems] = useState<ReflectionItem[]>([
     { 
       id: Date.now().toString(), 
@@ -87,11 +96,15 @@ const Writing: React.FC = () => {
       selectedAiSuggestions: []
     }
   ]);
+  const [strengthItems, setStrengthItems] = useState<StrengthItem[]>([]);
   const [selectedTags, setSelectedTags] = useState<{[itemId: string]: Array<{tag: string, type: 'keyword' | 'factor'}>}>({});
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
   
-  const highlightColors = ['#03ff00', '#ff00bc', '#deff00', '#00cdff'];
+  const highlightColors = ['#03ff00']; // 1단계: 이해하기용
+  const strengthColor = '#00cdff'; // 2단계: 강점찾기용
   const [colorIndex, setColorIndex] = useState(0);
+  const [isUnderstandingCompleted, setIsUnderstandingCompleted] = useState(false);
+  const [isStrengthCompleted, setIsStrengthCompleted] = useState(false);
 
   const letterParagraphs = [
     "안녕하세요. 저는 현재 직장에서 일하고 있는 양양입니다. 저는 ADHD를 가지고 있어요. 요즘 들어 직장에서 업무를 수행하는 데 많은 어려움을 겪고 있어, 조언을 구하고자 이렇게 편지를 쓰게 되었습니다.",
@@ -111,6 +124,7 @@ const Writing: React.FC = () => {
 
   // 편지 내용 초기화 및 사용자 정보 로드
   useEffect(() => {
+    // 편지 내용을 원본으로 초기화 (하이라이트 제거)
     setLetterContent([...letterParagraphs]);
     
     // 로컬 스토리지에서 사용자 정보 가져오기
@@ -137,6 +151,7 @@ const Writing: React.FC = () => {
             if (matchingSession) {
               setSessionId(matchingSession.id);
               setHighlightedItems(matchingSession.highlightedItems || []);
+              setStrengthItems(matchingSession.strengthItems || []);
               
               // reflectionItems 복원
               const loadedReflectionItems = matchingSession.reflectionItems || [
@@ -176,9 +191,14 @@ const Writing: React.FC = () => {
               
               setCurrentStep(matchingSession.currentStep || 1);
               
-              // 하이라이트 복원
-              if (matchingSession.highlightedItems && matchingSession.highlightedItems.length > 0) {
-                restoreHighlights(matchingSession.highlightedItems);
+              // 완료 상태 복원
+              setIsUnderstandingCompleted(matchingSession.isUnderstandingCompleted || false);
+              setIsStrengthCompleted(matchingSession.isStrengthCompleted || false);
+              
+              // 하이라이트 복원 (이해하기와 강점찾기 모두)
+              if ((matchingSession.highlightedItems && matchingSession.highlightedItems.length > 0) || 
+                  (matchingSession.strengthItems && matchingSession.strengthItems.length > 0)) {
+                restoreHighlights(matchingSession.highlightedItems || [], matchingSession.strengthItems || []);
               }
             }
           }
@@ -191,21 +211,35 @@ const Writing: React.FC = () => {
     }
   }, [currentUser, answersId]);
 
-  // 하이라이트 복원 함수
-  const restoreHighlights = (items: any[]) => {
+  // 하이라이트 복원 함수 - 이해하기와 강점찾기 모두 처리
+  const restoreHighlights = (highlightItems: any[], strengthItems: any[] = []) => {
     setLetterContent(prev => {
       const newContent = [...letterParagraphs];
       
-      items.forEach(item => {
-        if (item.paragraphIndex < newContent.length) {
-          const originalParagraph = letterParagraphs[item.paragraphIndex];
-          const highlightedText = originalParagraph.replace(
+      // 각 문단별로 하이라이트 적용
+      for (let paragraphIndex = 0; paragraphIndex < newContent.length; paragraphIndex++) {
+        let finalParagraph = letterParagraphs[paragraphIndex];
+        
+        // 해당 문단의 이해하기 하이라이트들 적용
+        const highlightItemsForParagraph = highlightItems.filter(item => item.paragraphIndex === paragraphIndex);
+        highlightItemsForParagraph.forEach(item => {
+          finalParagraph = finalParagraph.replace(
             new RegExp(item.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
             `<span style="background-color: ${item.color}; color: #000000;">${item.text}</span>`
           );
-          newContent[item.paragraphIndex] = highlightedText;
-        }
-      });
+        });
+        
+        // 해당 문단의 강점찾기 하이라이트들 적용
+        const strengthItemsForParagraph = strengthItems.filter(item => item.paragraphIndex === paragraphIndex);
+        strengthItemsForParagraph.forEach(item => {
+          finalParagraph = finalParagraph.replace(
+            new RegExp(item.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+            `<span style="background-color: ${item.color}; color: #000000;">${item.text}</span>`
+          );
+        });
+        
+        newContent[paragraphIndex] = finalParagraph;
+      }
       
       return newContent;
     });
@@ -213,7 +247,7 @@ const Writing: React.FC = () => {
 
   // 세션 자동 저장
   useEffect(() => {
-    if (currentUser && (highlightedItems.length > 0 || reflectionItems.length > 0)) {
+    if (currentUser && (highlightedItems.length > 0 || strengthItems.length > 0 || reflectionItems.length > 0)) {
       const saveSession = async () => {
         try {
           // 데이터베이스 저장용 reflectionItems 준비 (임시 상태 제거)
@@ -236,10 +270,13 @@ const Writing: React.FC = () => {
             body: JSON.stringify({
               userId: currentUser.id,
               highlightedItems,
+              strengthItems,
               reflectionItems: reflectionItemsForDB,
               currentStep,
               sessionId,
-              questionAnswersId: answersId
+              questionAnswersId: answersId,
+              isUnderstandingCompleted,
+              isStrengthCompleted
             }),
           });
 
@@ -258,8 +295,46 @@ const Writing: React.FC = () => {
       const timeoutId = setTimeout(saveSession, 2000);
       return () => clearTimeout(timeoutId);
     }
-  }, [highlightedItems, reflectionItems, selectedTags, currentStep, currentUser, sessionId]);
+  }, [highlightedItems, strengthItems, reflectionItems, selectedTags, currentStep, currentUser, sessionId, isUnderstandingCompleted, isStrengthCompleted]);
 
+  // 단계 변경 시 편지 본문 하이라이트 업데이트
+  useEffect(() => {
+    updateLetterHighlights();
+  }, [currentStep, highlightedItems, strengthItems]);
+
+  // 모든 하이라이트를 편지 본문에 표시 (이해하기 + 강점찾기)
+  const updateLetterHighlights = () => {
+    setLetterContent(prev => {
+      const newContent = [...letterParagraphs];
+      
+      // 각 문단별로 하이라이트 적용
+      for (let paragraphIndex = 0; paragraphIndex < newContent.length; paragraphIndex++) {
+        let finalParagraph = letterParagraphs[paragraphIndex];
+        
+        // 이해하기 하이라이트 적용 (연두색)
+        const itemsForParagraph = highlightedItems.filter(item => item.paragraphIndex === paragraphIndex);
+        itemsForParagraph.forEach(item => {
+          finalParagraph = finalParagraph.replace(
+            new RegExp(item.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+            `<span style="background-color: ${item.color}; color: #000000;">${item.text}</span>`
+          );
+        });
+        
+        // 강점찾기 하이라이트 적용 (하늘색)
+        const strengthItemsForParagraph = strengthItems.filter(item => item.paragraphIndex === paragraphIndex);
+        strengthItemsForParagraph.forEach(item => {
+          finalParagraph = finalParagraph.replace(
+            new RegExp(item.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+            `<span style="background-color: ${item.color}; color: #000000;">${item.text}</span>`
+          );
+        });
+        
+        newContent[paragraphIndex] = finalParagraph;
+      }
+      
+      return newContent;
+    });
+  };
 
   // 텍스트 선택 및 하이라이트 기능
   useEffect(() => {
@@ -276,21 +351,33 @@ const Writing: React.FC = () => {
             const paragraphElement = parentElement.closest('.letterText');
             const paragraphIndex = parseInt(paragraphElement?.getAttribute('data-paragraph') || '0');
             
-            const currentColor = highlightColors[colorIndex];
-            
-            const newItem: HighlightedItem = {
-              id: Date.now().toString(),
-              text: selectedText,
-              color: currentColor,
-              originalText: letterParagraphs[paragraphIndex],
-              paragraphIndex: paragraphIndex
-            };
-            
-            setHighlightedItems(prev => [...prev, newItem]);
-            setColorIndex(prev => (prev + 1) % highlightColors.length);
-            
-            // 편지 본문에 하이라이트 적용
-            applyHighlightToLetter(paragraphIndex, selectedText, currentColor);
+            if (currentStep === 1 && !isUnderstandingCompleted) {
+              // 1단계: 이해하기 - 완료 전에는 연두색 하이라이트
+              const currentColor = highlightColors[colorIndex];
+              
+              const newItem: HighlightedItem = {
+                id: Date.now().toString(),
+                text: selectedText,
+                color: currentColor,
+                originalText: letterParagraphs[paragraphIndex],
+                paragraphIndex: paragraphIndex
+              };
+              
+              setHighlightedItems(prev => [...prev, newItem]);
+              
+            } else if ((currentStep === 1 && isUnderstandingCompleted) || 
+                      (currentStep === 2 && isUnderstandingCompleted && !isStrengthCompleted)) {
+              // 1단계 완료 후 또는 2단계: 강점찾기 - 하늘색 하이라이트
+              const newStrengthItem: StrengthItem = {
+                id: Date.now().toString(),
+                text: selectedText,
+                color: strengthColor,
+                originalText: letterParagraphs[paragraphIndex],
+                paragraphIndex: paragraphIndex
+              };
+              
+              setStrengthItems(prev => [...prev, newStrengthItem]);
+            }
             
             // 질문 자동 생성 제거 - 사용자가 버튼을 눌러야 생성됨
             
@@ -308,65 +395,13 @@ const Writing: React.FC = () => {
     };
   }, [colorIndex, highlightedItems]);
 
-  const applyHighlightToLetter = (paragraphIndex: number, selectedText: string, color: string) => {
-    setLetterContent(prev => {
-      const newContent = [...prev];
-      
-      // 원본 텍스트에서 다시 시작하여 HTML 오류 방지
-      const originalParagraph = letterParagraphs[paragraphIndex];
-      
-      // 기존 하이라이트들을 유지하면서 새 하이라이트 추가
-      let finalParagraph = originalParagraph;
-      
-      // 현재 문단에 적용된 모든 하이라이트 아이템들을 다시 적용
-      const itemsForThisParagraph = highlightedItems.filter(item => item.paragraphIndex === paragraphIndex);
-      itemsForThisParagraph.forEach(item => {
-        finalParagraph = finalParagraph.replace(
-          new RegExp(item.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
-          `<span style="background-color: ${item.color}; color: #000000;">${item.text}</span>`
-        );
-      });
-      
-      // 새 하이라이트 추가
-      finalParagraph = finalParagraph.replace(
-        new RegExp(selectedText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
-        `<span style="background-color: ${color}; color: #000000;">${selectedText}</span>`
-      );
-      
-      newContent[paragraphIndex] = finalParagraph;
-      return newContent;
-    });
-  };
-
 
   const removeHighlightedItem = (id: string) => {
-    const item = highlightedItems.find(item => item.id === id);
-    if (item) {
-      // 편지 본문에서도 하이라이트 제거
-      removeHighlightFromLetter(item);
-    }
     setHighlightedItems(prev => prev.filter(item => item.id !== id));
   };
 
-  const removeHighlightFromLetter = (item: HighlightedItem) => {
-    setLetterContent(prev => {
-      const newContent = [...prev];
-      const originalParagraph = letterParagraphs[item.paragraphIndex];
-      
-      // 해당 아이템을 제외한 나머지 하이라이트들만 재적용
-      const remainingItems = highlightedItems.filter(hi => hi.id !== item.id && hi.paragraphIndex === item.paragraphIndex);
-      
-      let finalParagraph = originalParagraph;
-      remainingItems.forEach(remainingItem => {
-        finalParagraph = finalParagraph.replace(
-          new RegExp(remainingItem.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
-          `<span style="background-color: ${remainingItem.color}; color: #000000;">${remainingItem.text}</span>`
-        );
-      });
-      
-      newContent[item.paragraphIndex] = finalParagraph;
-      return newContent;
-    });
+  const removeStrengthItem = (id: string) => {
+    setStrengthItems(prev => prev.filter(item => item.id !== id));
   };
 
   const generateQuestions = async (itemId: string, additionalInput?: string, itemText?: string) => {
@@ -1015,10 +1050,11 @@ const Writing: React.FC = () => {
               <div className={`${styles.stepDot} ${currentStep === 1 ? styles.active : ''}`}></div>
               <div className={`${styles.stepDot} ${currentStep === 2 ? styles.active : ''}`}></div>
               <div className={`${styles.stepDot} ${currentStep === 3 ? styles.active : ''}`}></div>
+              <div className={`${styles.stepDot} ${currentStep === 4 ? styles.active : ''}`}></div>
             </div>
             <button 
-              onClick={() => setCurrentStep(prev => Math.min(3, prev + 1))}
-              disabled={currentStep === 3}
+              onClick={() => setCurrentStep(prev => Math.min(4, prev + 1))}
+              disabled={currentStep === 4}
               className={styles.stepButton}
             >
               &gt;
@@ -1072,109 +1108,129 @@ const Writing: React.FC = () => {
                       </div>
                     </div>
                     
-                    {/* 이전 대화 히스토리 */}
-                    {item.conversationHistory && item.conversationHistory.length > 0 && (
-                      <div className={styles.conversationHistory}>
-                        {item.conversationHistory.map((qa) => (
-                          <div key={qa.id} className={styles.completedQA}>
-                            <div className={styles.selectedQuestionContainer}>
-                              <div className={styles.selectedQuestion}>
-                                <div className={styles.questionContent}>
-                                  💡 {qa.question}
-                                </div>
-                                <button 
-                                  onClick={() => {
-                                    setHighlightedItems(prev => prev.map(prevItem => 
-                                      prevItem.id === item.id 
-                                        ? { 
-                                            ...prevItem, 
-                                            conversationHistory: prevItem.conversationHistory?.filter(historyQA => historyQA.id !== qa.id)
-                                          }
-                                        : prevItem
-                                    ));
-                                  }}
-                                  className={styles.removeButton}
-                                >
-                                  ×
-                                </button>
-                              </div>
-                              <textarea
-                                value={qa.answer}
-                                onChange={(e) => {
-                                  const newAnswer = e.target.value;
-                                  setHighlightedItems(prev => prev.map(prevItem => 
-                                    prevItem.id === item.id 
-                                      ? { 
-                                          ...prevItem, 
-                                          conversationHistory: prevItem.conversationHistory?.map(historyQA => 
-                                            historyQA.id === qa.id 
-                                              ? { ...historyQA, answer: newAnswer }
-                                              : historyQA
-                                          )
-                                        }
-                                      : prevItem
-                                  ));
-                                }}
-                                placeholder="답변을 입력해주세요..."
-                                className={styles.answerInput}
-                                spellCheck={false}
-                              />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    
-                    {/* 질문 추천 받기 버튼 - 질문이 없을 때만 표시 */}
-                    {(!item.questions || item.questions.length === 0) && !item.isLoadingQuestions && (
-                      <div className={styles.getQuestionsContainer}>
-                        <button
-                          onClick={() => generateQuestions(item.id, item.userExplanation, item.text)}
-                          className={styles.getQuestionsButton}
-                        >
-                          질문 추천 받기
-                        </button>
-                      </div>
-                    )}
-                    
-                    {/* 질문 생성 중 표시 */}
-                    {item.isLoadingQuestions && (
-                      <div className={styles.loadingContainer}>
-                        <p className={styles.loadingText}>새로운 질문을 추천하고 있습니다...</p>
-                      </div>
-                    )}
-                    
-                    {/* 추천 질문 목록 */}
-                    {item.questions && item.questions.length > 0 && (
-                      <div className={styles.questionsContainer}>
-                        <h4 className={styles.questionsTitle}>추천 질문</h4>
-                        <div className={styles.questionsList}>
-                          {item.questions.map((question) => (
-                            <button
-                              key={question.id}
-                              onClick={() => selectQuestion(item.id, question)}
-                              className={styles.questionButton}
-                            >
-                              💡 {question.text}
-                            </button>
-                          ))}
-                        </div>
-                        <button
-                          onClick={() => generateQuestions(item.id, item.userExplanation, item.text)}
-                          className={styles.getQuestionsButton}
-                        >
-                          질문 추천 받기
-                        </button>
-                      </div>
-                    )}
+                    {/* 이전 대화 히스토리와 질문 관련 기능은 주석처리됨 */}
                   </div>
                 ))}
+              </div>
+              
+              {/* 이해하기 완료/수정 버튼 */}
+              <div className={styles.stepControlContainer}>
+                {!isUnderstandingCompleted ? (
+                  <button
+                    onClick={() => setIsUnderstandingCompleted(true)}
+                    className={styles.completeButton}
+                    disabled={highlightedItems.length === 0}
+                  >
+                    ✅ 이해하기 완료
+                  </button>
+                ) : (
+                  <div className={styles.completedSection}>
+                    <span className={styles.completedText}>✅ 이해하기 완료됨</span>
+                    <button
+                      onClick={() => setIsUnderstandingCompleted(false)}
+                      className={styles.editButton}
+                    >
+                      ✏️ 수정하기
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}
 
-          {/* 2단계: 고민 정리하기 */}
+          {/* 2단계: 강점찾기 */}
           {currentStep === 2 && (
+            <div className={styles.strengthSection}>
+              <h2 className={styles.sectionTitle}>강점찾기</h2>
+              {!isUnderstandingCompleted ? (
+                <div className={styles.warningMessage}>
+                  <p className={styles.warningText}>
+                    ⚠️ 먼저 1단계 이해하기를 완료해주세요.
+                  </p>
+                  <button
+                    onClick={() => setCurrentStep(1)}
+                    className={styles.goBackButton}
+                  >
+                    1단계로 이동
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <p className={styles.guideText}>편지에서 화자(양양)의 강점이 보이는 부분을 드래그 해서 하이라이트 하고 Enter를 눌러주세요.</p>
+            
+              <div className={styles.strengthItemsContainer}>
+                {strengthItems.map((item) => (
+                  <div key={item.id} className={styles.strengthItem}>
+                    <div className={styles.strengthItemHeader}>
+                      <span 
+                        className={styles.strengthText}
+                        style={{ backgroundColor: item.color, color: '#000000' }}
+                      >
+                        &quot;{item.text}&quot;
+                      </span>
+                      <button 
+                        onClick={() => removeStrengthItem(item.id)}
+                        className={styles.removeButton}
+                      >
+                        ×
+                      </button>
+                    </div>
+                    
+                    {/* 강점 설명 입력 필드 */}
+                    <div className={styles.strengthDescriptionContainer}>
+                      <div className={styles.strengthDescriptionSection}>
+                        <label className={styles.strengthDescriptionLabel}>
+                          이 부분에서 어떤 강점이 보이나요?
+                        </label>
+                        <textarea
+                          value={item.strengthDescription || ''}
+                          onChange={(e) => {
+                            const newDescription = e.target.value;
+                            setStrengthItems(prev => prev.map(prevItem => 
+                              prevItem.id === item.id 
+                                ? { ...prevItem, strengthDescription: newDescription }
+                                : prevItem
+                            ));
+                          }}
+                          placeholder="양양이가 가진 강점이나 긍정적인 면을 찾아서 적어주세요..."
+                          className={styles.strengthDescriptionInput}
+                          spellCheck={false}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              {/* 강점찾기 완료/수정 버튼 */}
+              <div className={styles.stepControlContainer}>
+                {!isStrengthCompleted ? (
+                  <button
+                    onClick={() => setIsStrengthCompleted(true)}
+                    className={styles.completeButton}
+                    disabled={strengthItems.length === 0}
+                  >
+                    ✅ 강점찾기 완료
+                  </button>
+                ) : (
+                  <div className={styles.completedSection}>
+                    <span className={styles.completedText}>✅ 강점찾기 완료됨</span>
+                    <button
+                      onClick={() => setIsStrengthCompleted(false)}
+                      className={styles.editButton}
+                    >
+                      ✏️ 수정하기
+                    </button>
+                  </div>
+                )}
+              </div>
+              </>
+              )}
+            </div>
+          )}
+
+          {/* 3단계: 고민 정리하기 */}
+          {currentStep === 3 && (
             <div className={styles.reflectionSection}>
               <h2 className={styles.sectionTitle}>고민 정리하기</h2>
               <p className={styles.guideText}>양양이의 고민들을 {currentUser?.nickname || '사용자'}님의 언어로 다시 표현해 보세요.</p>
@@ -1354,8 +1410,8 @@ const Writing: React.FC = () => {
             </div>
           )}
 
-          {/* 3단계: 해결책 탐색 */}
-          {currentStep === 3 && (
+          {/* 4단계: 해결책 탐색 */}
+          {currentStep === 4 && (
             <div className={styles.solutionSection}>
               <h2 className={styles.sectionTitle}>해결책 탐색하기</h2>
               <p className={styles.guideText}>
@@ -1476,13 +1532,13 @@ const Writing: React.FC = () => {
                 {reflectionItems.filter(item => item.content.trim().length > 0).length === 0 && (
                   <div className={styles.noReflections}>
                     <p className={styles.noReflectionsText}>
-                      2단계에서 고민을 정리한 후에 해결책을 탐색할 수 있습니다.
+                      3단계에서 고민을 정리한 후에 해결책을 탐색할 수 있습니다.
                     </p>
                     <button
-                      onClick={() => setCurrentStep(2)}
+                      onClick={() => setCurrentStep(3)}
                       className={styles.goToStep2Button}
                     >
-                      2단계로 이동
+                      3단계로 이동
                     </button>
                   </div>
                 )}
