@@ -1,0 +1,110 @@
+.container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--background);
+  padding: 20px;
+}
+
+.content {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.textDisplay {
+  color: #ffffff;
+  font-family: 'DungGeunMo', monospace;
+  font-size: 18px;
+  line-height: 1.8;
+  padding: 40px;
+  text-align: left;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  margin-bottom: 40px;
+}
+
+.buttonContainer {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 40px;
+}
+
+.backButton {
+  padding: 16px 20px;
+  border: 2px solid #666666;
+  border-radius: 4px;
+  background-color: #000000;
+  color: #666666;
+  font-family: 'DungGeunMo', monospace;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  box-shadow: 
+    2px 2px 0px #222222,
+    4px 4px 0px #111111;
+}
+
+.backButton:hover {
+  border-color: #ffd100;
+  color: #ffd100;
+  transform: translate(-2px, -2px);
+  box-shadow: 
+    4px 4px 0px #222222,
+    6px 6px 0px #111111;
+}
+
+.backButton:active {
+  transform: translate(0px, 0px);
+  box-shadow: 
+    1px 1px 0px #222222,
+    2px 2px 0px #111111;
+}
+
+.completeButton {
+  flex: 1;
+  padding: 16px 20px;
+  border: 3px solid #ffd100;
+  border-radius: 4px;
+  background-color: #000000;
+  color: #ffd100;
+  font-family: 'DungGeunMo', monospace;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-weight: bold;
+  box-shadow: 
+    2px 2px 0px #333333,
+    4px 4px 0px #111111;
+}
+
+.completeButton:hover {
+  background-color: #ffd100;
+  color: #000000;
+  transform: translate(-2px, -2px);
+  box-shadow: 
+    4px 4px 0px #333333,
+    6px 6px 0px #111111;
+}
+
+.completeButton:active {
+  transform: translate(0px, 0px);
+  box-shadow: 
+    1px 1px 0px #333333,
+    2px 2px 0px #111111;
+}
+
+@media (max-width: 600px) {
+  .textDisplay {
+    font-size: 16px;
+    padding: 20px;
+    line-height: 1.6;
+  }
+}
