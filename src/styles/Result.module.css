@@ -13,16 +13,31 @@
   margin: 0 auto;
 }
 
-.textDisplay {
+/* 섹션 스타일 */
+.section {
+  margin-bottom: 40px;
+  padding: 0 40px;
+}
+
+.sectionTitle {
+  color: #ffd100;
+  font-family: 'DungGeunMo', monospace;
+  font-size: 22px;
+  margin-bottom: 10px;
+  text-align: left;
+  text-shadow: 
+    1px 1px 0px #000000,
+    2px 2px 0px #333333;
+}
+
+.sectionContent {
   color: #ffffff;
   font-family: 'DungGeunMo', monospace;
-  font-size: 18px;
-  line-height: 1.8;
-  padding: 40px;
+  font-size: 16px;
+  line-height: 1.6;
   text-align: left;
   word-wrap: break-word;
   white-space: pre-wrap;
-  margin-bottom: 40px;
 }
 
 .buttonContainer {
@@ -101,10 +116,89 @@
     2px 2px 0px #111111;
 }
 
+/* 강점 섹션 전용 스타일 */
+.strengthGeneral {
+  color: #ffffff;
+  font-family: 'DungGeunMo', monospace;
+  font-size: 16px;
+  line-height: 1.6;
+  text-align: left;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  margin-bottom: 20px;
+}
+
+.strengthTags {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.strengthTagItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 15px;
+  margin-bottom: 12px;
+}
+
+.strengthTag {
+  padding: 6px 12px;
+  border: 2px solid #00ff00;
+  border-radius: 4px;
+  background-color: #000000;
+  color: #00ff00;
+  font-family: 'DungGeunMo', monospace;
+  font-size: 12px;
+  text-align: center;
+  white-space: nowrap;
+  box-shadow: 
+    2px 2px 0px #004400,
+    4px 4px 0px #002200;
+  min-width: 120px;
+  flex-shrink: 0;
+}
+
+.strengthTagContent {
+  color: #ffffff;
+  font-family: 'DungGeunMo', monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  flex-grow: 1;
+}
+
 @media (max-width: 600px) {
-  .textDisplay {
-    font-size: 16px;
-    padding: 20px;
-    line-height: 1.6;
+  .section {
+    padding: 0 20px;
+    margin-bottom: 30px;
+  }
+  
+  .sectionTitle {
+    font-size: 18px;
+  }
+  
+  .sectionContent {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  
+  .strengthGeneral {
+    padding: 12px;
+  }
+  
+  .strengthTagItem {
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  
+  .strengthTag {
+    font-size: 10px;
+    padding: 4px 8px;
+    min-width: auto;
+    align-self: flex-start;
+  }
+  
+  .strengthTagContent {
+    font-size: 12px;
   }
 }

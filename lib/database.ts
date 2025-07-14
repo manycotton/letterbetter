@@ -1,5 +1,5 @@
 import redis from './upstash';
-import { User, LetterSession, HighlightedItem, QuestionAnswers, ReflectionItem } from '../types/database';
+import { User, LetterSession, HighlightedItem, StrengthItem, QuestionAnswers, ReflectionItem, GeneratedLetter, ReflectionHints, StrengthAnalysisLog } from '../types/database';
 
 // User 관련 함수들
 export async function createUser(nickname: string, password: string): Promise<User> {
@@ -49,7 +49,7 @@ export async function validateUser(nickname: string, password: string): Promise<
 }
 
 // Letter Session 관련 함수들
-export async function createLetterSession(userId: string, highlightedItems: HighlightedItem[], questionAnswersId?: string): Promise<LetterSession> {
+export async function createLetterSession(userId: string, highlightedItems: HighlightedItem[], strengthItems?: StrengthItem[], questionAnswersId?: string): Promise<LetterSession> {
   const sessionId = `session:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
   
   const session: LetterSession = {
@@ -57,6 +57,7 @@ export async function createLetterSession(userId: string, highlightedItems: High
     userId,
     questionAnswersId,
     highlightedItems,
+    strengthItems: strengthItems || [],
     reflectionItems: [],
     currentStep: 1,
     createdAt: new Date().toISOString(),
@@ -71,7 +72,7 @@ export async function createLetterSession(userId: string, highlightedItems: High
   return session;
 }
 
-export async function updateLetterSession(sessionId: string, highlightedItems: HighlightedItem[], reflectionItems?: ReflectionItem[], currentStep?: number): Promise<void> {
+export async function updateLetterSession(sessionId: string, highlightedItems: HighlightedItem[], strengthItems?: StrengthItem[], reflectionItems?: ReflectionItem[], currentStep?: number): Promise<void> {
   const sessionData = await redis.get(sessionId);
   if (!sessionData) throw new Error('Session not found');
   
@@ -83,6 +84,9 @@ export async function updateLetterSession(sessionId: string, highlightedItems: H
   }
   
   session.highlightedItems = highlightedItems;
+  if (strengthItems !== undefined) {
+    session.strengthItems = strengthItems;
+  }
   if (reflectionItems !== undefined) {
     session.reflectionItems = reflectionItems;
   }
@@ -194,4 +198,144 @@ export async function getUserQuestionAnswers(userId: string): Promise<QuestionAn
   }
   
   return answers.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+}
+
+// Strength Analysis Log 관련 함수들
+export async function saveStrengthAnalysisLog(
+  answersId: string, 
+  userId: string,
+  userStrengthsAnalysis: any,
+  selectedStrengthsForLetter: any[]
+): Promise<StrengthAnalysisLog> {
+  const logId = `strength_log:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
+  
+  const strengthLog: StrengthAnalysisLog = {
+    id: logId,
+    answersId,
+    userId,
+    userStrengthsAnalysis,
+    selectedStrengthsForLetter,
+    createdAt: new Date().toISOString()
+  };
+
+  await redis.set(logId, JSON.stringify(strengthLog));
+  await redis.set(`strength_analysis:${answersId}`, logId);
+  
+  return strengthLog;
+}
+
+export async function getStrengthAnalysisLog(answersId: string): Promise<StrengthAnalysisLog | null> {
+  const logId = await redis.get(`strength_analysis:${answersId}`);
+  if (!logId) return null;
+  
+  const logData = await redis.get(logId as string);
+  if (!logData) return null;
+  
+  if (typeof logData === 'object') {
+    return logData as StrengthAnalysisLog;
+  }
+  
+  return JSON.parse(logData as string) as StrengthAnalysisLog;
+}
+
+// Generated Letter 관련 함수들
+export async function saveGeneratedLetter(answersId: string, letterData: any, strengthAnalysisLogId?: string): Promise<GeneratedLetter> {
+  const letterId = `letter:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
+  const letterKey = `generated_letter:${answersId}`;
+  
+  const letterRecord: GeneratedLetter = {
+    id: letterId,
+    answersId,
+    characterName: letterData.characterName,
+    age: letterData.age,
+    occupation: letterData.occupation,
+    letterContent: letterData.letterContent,
+    usedStrengths: letterData.usedStrengths,
+    strengthAnalysisLogId,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  await redis.set(letterKey, JSON.stringify(letterRecord));
+  await redis.set(letterId, JSON.stringify(letterRecord));
+  
+  return letterRecord;
+}
+
+export async function getGeneratedLetter(answersId: string): Promise<GeneratedLetter | null> {
+  const letterKey = `generated_letter:${answersId}`;
+  const letterData = await redis.get(letterKey);
+  
+  if (!letterData) return null;
+  
+  if (typeof letterData === 'object') {
+    return letterData as GeneratedLetter;
+  }
+  
+  return JSON.parse(letterData as string) as GeneratedLetter;
+}
+
+export async function getAllGeneratedLetters(userId: string): Promise<GeneratedLetter[]> {
+  const userAnswers = await getUserQuestionAnswers(userId);
+  const letters: GeneratedLetter[] = [];
+  
+  for (const answers of userAnswers) {
+    const letter = await getGeneratedLetter(answers.id);
+    if (letter) {
+      letters.push(letter);
+    }
+  }
+  
+  return letters.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+// Reflection Hints 관련 함수들
+export async function saveReflectionHints(sessionId: string, characterName: string, highlightedData: HighlightedItem[], generatedHints: string[]): Promise<ReflectionHints> {
+  const hintsId = `hints:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
+  
+  const hintsRecord: ReflectionHints = {
+    id: hintsId,
+    sessionId,
+    characterName,
+    highlightedData,
+    generatedHints,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  await redis.set(hintsId, JSON.stringify(hintsRecord));
+  await redis.set(`session_hints:${sessionId}`, hintsId);
+  
+  return hintsRecord;
+}
+
+export async function getReflectionHints(sessionId: string): Promise<ReflectionHints | null> {
+  const hintsId = await redis.get(`session_hints:${sessionId}`);
+  if (!hintsId) return null;
+  
+  const hintsData = await redis.get(hintsId as string);
+  if (!hintsData) return null;
+  
+  if (typeof hintsData === 'object') {
+    return hintsData as ReflectionHints;
+  }
+  
+  return JSON.parse(hintsData as string) as ReflectionHints;
+}
+
+export async function updateReflectionHints(hintsId: string, generatedHints: string[]): Promise<void> {
+  const hintsData = await redis.get(hintsId);
+  if (!hintsData) throw new Error('Reflection hints not found');
+  
+  let hints: ReflectionHints;
+  if (typeof hintsData === 'object') {
+    hints = hintsData as ReflectionHints;
+  } else {
+    hints = JSON.parse(hintsData as string) as ReflectionHints;
+  }
+  
+  hints.generatedHints = generatedHints;
+  hints.updatedAt = new Date().toISOString();
+  
+  await redis.set(hintsId, JSON.stringify(hints));
 }

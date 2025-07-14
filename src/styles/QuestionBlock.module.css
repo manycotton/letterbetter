@@ -19,12 +19,27 @@
 .question {
   color: #ffd100;
   font-family: 'DungGeunMo', monospace;
-  font-size: 20px;
+  font-size: 19px;
   line-height: 1.6;
   margin-bottom: 24px;
   text-shadow: 
     1px 1px 0px #000000,
     2px 2px 0px #333333;
+}
+
+.guideBox {
+  background-color: rgba(51, 51, 51, 0.7);
+  border: 1px solid #666666;
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  color: #ffffff;
+  font-family: 'DungGeunMo', monospace;
+  font-size: 15px;
+  line-height: 1.5;
+  text-shadow: 1px 1px 0px #000000;
+  opacity: 0.9;
+  white-space: pre-line;
 }
 
 .cursor {
@@ -194,7 +209,7 @@
   background-color: transparent;
   color: #ffffff;
   font-family: 'DungGeunMo', monospace;
-  font-size: 20px;
+  font-size: 19px;
   outline: none;
   resize: none;
   overflow: hidden;
@@ -319,6 +334,45 @@
   opacity: 0.5;
 }
 
+/* 기본 removeItemButton 스타일 */
+.removeItemButton {
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.removeItemButton::before,
+.removeItemButton::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 12px;
+  height: 2px;
+  background-color: #ff4444;
+  transform-origin: center;
+}
+
+.removeItemButton::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.removeItemButton::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+.removeItemButton:hover::before,
+.removeItemButton:hover::after {
+  background-color: #ff6666;
+  width: 14px;
+}
+
 @media (max-width: 600px) {
   .questionBlock {
     padding: 24px;
@@ -340,4 +394,229 @@
     font-size: 10px;
     padding: 6px 12px;
   }
+  
+  .strengthTagButton {
+    font-size: 10px;
+    padding: 6px 10px;
+  }
+  
+  .showMoreButton {
+    font-size: 10px;
+    padding: 2px 4px;
+  }
+  
+  .strengthTagsGuide {
+    font-size: 11px;
+  }
+  
+  .strengthTagItem {
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  
+  .strengthTagTextarea {
+    font-size: 13px;
+    min-height: 50px;
+    padding: 10px 12px;
+  }
+  
+  .removeItemButton {
+    width: 18px;
+    height: 18px;
+  }
+  
+  .removeItemButton::before,
+  .removeItemButton::after {
+    width: 10px;
+    height: 1px;
+  }
+  
+  .removeItemButton:hover::before,
+  .removeItemButton:hover::after {
+    width: 12px;
+  }
 }
+
+/* 강점 태그 스타일 */
+.strengthTagsContainer {
+  margin-bottom: 20px;
+}
+
+.strengthTagsGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.strengthTagWrapper {
+  position: relative;
+}
+
+.strengthTagButton {
+  padding: 8px 12px;
+  border: 2px solid #666666;
+  border-radius: 4px;
+  background-color: #000000;
+  color: #ffffff;
+  font-family: 'DungGeunMo', monospace;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+  white-space: nowrap;
+  box-shadow: 
+    2px 2px 0px #222222,
+    4px 4px 0px #111111;
+}
+
+.strengthTagButton:hover {
+  border-color: #00ff00;
+  background-color: #1a1b1e;
+  transform: translate(-1px, -1px);
+  box-shadow: 
+    3px 3px 0px #222222,
+    5px 5px 0px #111111;
+}
+
+.strengthTagSelected {
+  border-color: #00ff00;
+  background-color: #00ff00;
+  color: #000000;
+  box-shadow: 
+    2px 2px 0px #004400,
+    4px 4px 0px #002200;
+}
+
+.strengthTagSelected:hover {
+  background-color: #00ff00;
+  color: #000000;
+  border-color: #00dd00;
+  transform: translate(-1px, -1px);
+  box-shadow: 
+    3px 3px 0px #004400,
+    5px 5px 0px #002200;
+}
+
+.strengthTagTooltip {
+  position: absolute;
+  top: -60px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.95);
+  color: #ffffff;
+  padding: 10px 16px;
+  border-radius: 4px;
+  border: 1px solid #00ff00;
+  font-family: 'DungGeunMo', monospace;
+  font-size: 11px;
+  white-space: normal;
+  width: 320px;
+  max-width: 90vw;
+  z-index: 1000;
+  text-align: center;
+  line-height: 1.4;
+  box-shadow: 
+    0px 2px 8px rgba(0, 255, 0, 0.3),
+    inset 0px 0px 0px 1px rgba(0, 255, 0, 0.2);
+  animation: tooltipAppear 0.2s ease-out;
+  pointer-events: none;
+}
+
+.strengthTagTooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: #00ff00;
+}
+
+@keyframes tooltipAppear {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.showMoreButton {
+  padding: 4px 8px;
+  border: none;
+  background: none;
+  color: #ffd100;
+  font-family: 'DungGeunMo', monospace;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+  white-space: nowrap;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.showMoreButton:hover {
+  color: #ffffff;
+  text-decoration: none;
+  transform: none;
+}
+
+.strengthTagsGuide {
+  margin-bottom: 12px;
+  color: #cccccc;
+  font-family: 'DungGeunMo', monospace;
+  font-size: 13px;
+  text-align: center;
+}
+
+/* 선택된 강점 아이템들 스타일 */
+.selectedStrengthItems {
+  margin: 20px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.strengthTagItem {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 15px;
+}
+
+.strengthTagHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.strengthTagTextarea {
+  flex-grow: 1;
+  padding: 12px 16px;
+  border: 1px solid #666666;
+  border-radius: 4px;
+  background-color: #000000;
+  color: #ffffff;
+  font-family: 'DungGeunMo', monospace;
+  font-size: 15px;
+  outline: none;
+  resize: none;
+  min-height: 60px;
+  line-height: 1.5;
+  caret-color: #ffd100;
+  overflow: hidden;
+}
+
+.strengthTagTextarea:focus {
+  border-color: #ffd100;
+  background-color: #0a0a0a;
+}
+
+.strengthTagTextarea::placeholder {
+  color: #666666;
+  opacity: 1;
+}
+

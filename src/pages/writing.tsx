@@ -27,7 +27,9 @@ interface HighlightedItem {
   userAnswer?: string;
   conversationHistory?: QAPair[];
   editingQAId?: string;
+  problemReason?: string; // 왜 고민이라고 생각했는지
   userExplanation?: string;
+  emotionInference?: string;
 }
 
 interface StrengthItem {
@@ -37,6 +39,7 @@ interface StrengthItem {
   originalText: string;
   paragraphIndex: number;
   strengthDescription?: string;
+  strengthApplication?: string;
 }
 
 interface AiSuggestion {
@@ -48,6 +51,8 @@ interface AiSuggestion {
 interface ReflectionItem {
   id: string;
   content: string;
+  selectedHints?: string[]; // 선택된 힌트 태그들
+  selectedFactors?: string[]; // 선택된 환경적 요인 태그들
   keywords?: string[];
   isLoadingKeywords?: boolean;
   inspectionStep?: number; // 0: 미시작, 1: 첫번째완료(감정제안), 2: 두번째완료(비난제안 또는 모든완료), 3: 모든검사완료
@@ -62,12 +67,14 @@ interface ReflectionItem {
     environmentalFactors?: string[];
     isRegenerating?: boolean;
   };
+  blameWarningExpanded?: boolean; // blame warning 펼치기 상태
   isProcessing?: boolean;
   personalReflection?: string;
   aiSuggestions?: AiSuggestion[];
   isLoadingAiSuggestions?: boolean;
   selectedAiSuggestions?: AiSuggestion[];
   solutionContent?: string;
+  solutionInputs?: { id: string; content: string; showStrengthHelper?: boolean }[];
   solutionCompleted?: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -86,6 +93,8 @@ const Writing: React.FC = () => {
     { 
       id: Date.now().toString(), 
       content: '', 
+      selectedHints: [],
+      selectedFactors: [],
       keywords: [], 
       isLoadingKeywords: false, 
       inspectionStep: 0, 
@@ -93,28 +102,43 @@ const Writing: React.FC = () => {
       personalReflection: '',
       aiSuggestions: [],
       isLoadingAiSuggestions: false,
-      selectedAiSuggestions: []
+      selectedAiSuggestions: [],
+      solutionInputs: [{ id: Date.now().toString(), content: '', showStrengthHelper: false }]
     }
   ]);
   const [strengthItems, setStrengthItems] = useState<StrengthItem[]>([]);
   const [selectedTags, setSelectedTags] = useState<{[itemId: string]: Array<{tag: string, type: 'keyword' | 'factor'}>}>({});
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
   
+  // 생성된 편지 데이터
+  const [generatedLetter, setGeneratedLetter] = useState<any>(null);
+  
   const highlightColors = ['#03ff00']; // 1단계: 이해하기용
   const strengthColor = '#00cdff'; // 2단계: 강점찾기용
   const [colorIndex, setColorIndex] = useState(0);
   const [isUnderstandingCompleted, setIsUnderstandingCompleted] = useState(false);
   const [isStrengthCompleted, setIsStrengthCompleted] = useState(false);
+  
+  // 고민 정리 힌트 키워드
+  const [reflectionHints, setReflectionHints] = useState<string[]>([]);
+  const [isLoadingHints, setIsLoadingHints] = useState(false);
 
-  const letterParagraphs = [
+  // 기본 편지 내용 (fallback)
+  const defaultLetterParagraphs = [
     "안녕하세요. 저는 현재 직장에서 일하고 있는 양양입니다. 저는 ADHD를 가지고 있어요. 요즘 들어 직장에서 업무를 수행하는 데 많은 어려움을 겪고 있어, 조언을 구하고자 이렇게 편지를 쓰게 되었습니다.",
     "업무에 집중하기가 너무 힘듭니다. 작은 소리에도 쉽게 산만해지고, 한 가지 일에 꾸준히 몰두하기가 어렵습니다. 이로 인해 마감 기한을 놓치거나, 실수가 잦아지는 등 업무 효율이 떨어지고 있습니다. 해야 할 일이 많을 때는 어디서부터 시작해야 할지 막막하고, 우선순위를 정하는 것도 버겁게 느껴집니다.",
     "또한, 제 행동으로 인해 동료들에게 피해를 주는 것은 아닐까 하는 걱정이 큽니다. 중요한 회의 내용을 놓치거나, 다른 사람의 말을 도중에 끊는 경우도 종종 있어 난처할 때가 많습니다. 이러한 상황들이 반복되면서 자신감도 떨어지고, 스스로에게 실망하는 날들이 늘어나고 있습니다.",
     "ADHD 증상으로 인해 직장 생활에 어려움을 겪는 것이 저만의 문제는 아니라는 것을 알고 있습니다. 하지만 매일같이 반복되는 이러한 상황들 속에서 어떻게 현명하게 대처해야 할지 막막하기만 합니다."
   ];
 
+  // 생성된 편지가 있으면 사용, 없으면 기본값 사용
+  const letterParagraphs = generatedLetter?.letterContent || defaultLetterParagraphs;
+
   // 캐릭터 이름 추출
   const getCharacterName = () => {
+    if (generatedLetter?.characterName) {
+      return generatedLetter.characterName;
+    }
     const firstParagraph = letterParagraphs[0];
     const nameMatch = firstParagraph.match(/저는.*?([가-힣]{2,3})입니다/);
     return nameMatch ? nameMatch[1] : "양양";
@@ -122,10 +146,34 @@ const Writing: React.FC = () => {
 
   const characterName = getCharacterName();
 
-  // 편지 내용 초기화 및 사용자 정보 로드
+  // 생성된 편지 로드
   useEffect(() => {
-    // 편지 내용을 원본으로 초기화 (하이라이트 제거)
+    const loadGeneratedLetter = async () => {
+      if (answersId) {
+        try {
+          const response = await fetch(`/api/get-generated-letter?answersId=${answersId}`);
+          if (response.ok) {
+            const data = await response.json();
+            if (data.letter) {
+              setGeneratedLetter(data.letter);
+            }
+          }
+        } catch (error) {
+          console.error('Error loading generated letter:', error);
+        }
+      }
+    };
+
+    loadGeneratedLetter();
+  }, [answersId]);
+
+  // 편지 내용이 변경될 때마다 업데이트
+  useEffect(() => {
     setLetterContent([...letterParagraphs]);
+  }, [generatedLetter]);
+
+  // 사용자 정보 로드
+  useEffect(() => {
     
     // 로컬 스토리지에서 사용자 정보 가져오기
     const userData = localStorage.getItem('currentUser');
@@ -158,6 +206,8 @@ const Writing: React.FC = () => {
                 { 
                   id: Date.now().toString(), 
                   content: '', 
+                  selectedHints: [],
+                  selectedFactors: [],
                   keywords: [], 
                   isLoadingKeywords: false, 
                   inspectionStep: 0, 
@@ -210,6 +260,31 @@ const Writing: React.FC = () => {
       loadSessionData();
     }
   }, [currentUser, answersId]);
+
+  // 텍스트 영역 높이 자동 조절 함수
+  const adjustTextareaHeight = (textarea: HTMLTextAreaElement) => {
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = Math.max(40, textarea.scrollHeight) + 'px';
+    }
+  };
+
+  // 모든 reflection input 텍스트 영역 높이 자동 조절
+  useEffect(() => {
+    const adjustAllTextareas = () => {
+      reflectionItems.forEach(item => {
+        const textarea = document.querySelector(`[data-item-id="${item.id}"]`) as HTMLTextAreaElement;
+        if (textarea && item.content) {
+          adjustTextareaHeight(textarea);
+        }
+      });
+    };
+
+    // 컴포넌트 마운트 후 약간의 딜레이를 두고 실행
+    const timeoutId = setTimeout(adjustAllTextareas, 100);
+    
+    return () => clearTimeout(timeoutId);
+  }, [reflectionItems]);
 
   // 하이라이트 복원 함수 - 이해하기와 강점찾기 모두 처리
   const restoreHighlights = (highlightItems: any[], strengthItems: any[] = []) => {
@@ -296,6 +371,13 @@ const Writing: React.FC = () => {
       return () => clearTimeout(timeoutId);
     }
   }, [highlightedItems, strengthItems, reflectionItems, selectedTags, currentStep, currentUser, sessionId, isUnderstandingCompleted, isStrengthCompleted]);
+
+  // 3단계 진입 시 고민 정리 힌트 자동 생성
+  useEffect(() => {
+    if (currentStep === 3 && highlightedItems.length > 0 && reflectionHints.length === 0 && !isLoadingHints) {
+      generateReflectionHints();
+    }
+  }, [currentStep, highlightedItems]);
 
   // 단계 변경 시 편지 본문 하이라이트 업데이트
   useEffect(() => {
@@ -507,10 +589,12 @@ const Writing: React.FC = () => {
   };
 
   // Reflection item 관리 함수들
-  const addReflectionItem = () => {
+  const addReflectionItem = (initialHint?: string) => {
     const newItem: ReflectionItem = {
       id: Date.now().toString(),
       content: '',
+      selectedHints: initialHint ? [initialHint] : [],
+      selectedFactors: [],
       keywords: [],
       isLoadingKeywords: false,
       inspectionStep: 0,
@@ -533,60 +617,62 @@ const Writing: React.FC = () => {
     ));
   };
 
-  // 키워드 클릭 시 reflection input에 추가
-  const addKeywordToReflection = (itemId: string, keyword: string) => {
-    const currentItem = reflectionItems.find(item => item.id === itemId);
-    if (currentItem) {
-      const currentContent = currentItem.content.trim();
-      const newContent = currentContent 
-        ? `${currentContent} ${keyword}` 
-        : keyword;
-      
-      updateReflectionItem(itemId, newContent);
-      
-      // 선택된 태그 목록에 추가
-      setSelectedTags(prev => ({
-        ...prev,
-        [itemId]: [...(prev[itemId] || []), {tag: keyword, type: 'keyword'}]
-      }));
-      
-      // textarea 높이도 업데이트
-      setTimeout(() => {
-        const textarea = document.querySelector(`textarea[data-item-id="${itemId}"]`) as HTMLTextAreaElement;
-        if (textarea) {
-          textarea.style.height = 'auto';
-          textarea.style.height = Math.max(40, textarea.scrollHeight) + 'px';
-        }
-      }, 0);
+  // 힌트 태그 선택 함수
+  const selectReflectionHint = (hint: string) => {
+    // 빈 reflection item이 있으면 그곳에 추가, 없으면 새로 생성
+    const emptyItem = reflectionItems.find(item => !item.content.trim() && (!item.selectedHints || item.selectedHints.length === 0));
+    
+    if (emptyItem) {
+      // 빈 아이템에 힌트 추가 (content에는 자동 추가하지 않음)
+      setReflectionItems(prev => prev.map(item => 
+        item.id === emptyItem.id 
+          ? { 
+              ...item, 
+              selectedHints: [...(item.selectedHints || []), hint]
+            }
+          : item
+      ));
+    } else {
+      // 새 아이템 생성
+      addReflectionItem(hint);
     }
   };
 
-  // 환경적 요인 클릭 시 reflection input에 추가
+  // 힌트 태그 제거 함수
+  const removeHintFromReflection = (itemId: string, hintToRemove: string) => {
+    setReflectionItems(prev => prev.map(item => 
+      item.id === itemId 
+        ? { 
+            ...item, 
+            selectedHints: (item.selectedHints || []).filter(hint => hint !== hintToRemove)
+          }
+        : item
+    ));
+  };
+
+
+  // 환경적 요인 클릭 시 reflection item에 태그로 추가 (input에는 자동 추가 안함)
   const addFactorToReflection = (itemId: string, factor: string) => {
-    const currentItem = reflectionItems.find(item => item.id === itemId);
-    if (currentItem) {
-      const currentContent = currentItem.content.trim();
-      const newContent = currentContent 
-        ? `${currentContent} ${factor}` 
-        : factor;
-      
-      updateReflectionItem(itemId, newContent);
-      
-      // 선택된 태그 목록에 추가
-      setSelectedTags(prev => ({
-        ...prev,
-        [itemId]: [...(prev[itemId] || []), {tag: factor, type: 'factor'}]
-      }));
-      
-      // textarea 높이도 업데이트
-      setTimeout(() => {
-        const textarea = document.querySelector(`textarea[data-item-id="${itemId}"]`) as HTMLTextAreaElement;
-        if (textarea) {
-          textarea.style.height = 'auto';
-          textarea.style.height = Math.max(40, textarea.scrollHeight) + 'px';
-        }
-      }, 0);
-    }
+    setReflectionItems(prev => prev.map(item => 
+      item.id === itemId 
+        ? { 
+            ...item, 
+            selectedFactors: [...(item.selectedFactors || []), factor]
+          }
+        : item
+    ));
+  };
+
+  // 환경적 요인 태그 제거 함수
+  const removeFactorFromReflection = (itemId: string, factorToRemove: string) => {
+    setReflectionItems(prev => prev.map(item => 
+      item.id === itemId 
+        ? { 
+            ...item, 
+            selectedFactors: (item.selectedFactors || []).filter(factor => factor !== factorToRemove)
+          }
+        : item
+    ));
   };
 
   // 선택된 태그 제거
@@ -621,65 +707,52 @@ const Writing: React.FC = () => {
     updateReflectionItem(id, textarea.value);
   };
 
-  // 키워드 생성 함수 (개별 아이템용)
-  const generateReflectionKeywords = async (itemId: string) => {
-    // 해당 아이템을 로딩 상태로 변경
-    setReflectionItems(prev => prev.map(item => 
-      item.id === itemId 
-        ? { ...item, isLoadingKeywords: true }
-        : item
-    ));
+  // 고민 정리 힌트 생성 함수
+  const generateReflectionHints = async () => {
+    setIsLoadingHints(true);
     
     try {
-      // 하이라이트된 텍스트와 사용자 답변 수집
-      const highlightedTexts = highlightedItems.map(item => item.text);
-      const userAnswers = highlightedItems.flatMap(item => 
-        item.conversationHistory?.map(qa => qa.answer).filter(answer => answer.trim()) || []
-      );
-      const userExplanations = highlightedItems
-        .map(item => item.userExplanation)
-        .filter(explanation => explanation && explanation.trim());
+      // 모든 하이라이트된 정보 수집
+      const highlightData = highlightedItems.map(item => ({
+        text: item.text,
+        problemReason: item.problemReason || '', // 새로 추가된 필드
+        userExplanation: item.userExplanation || '',
+        emotionInference: item.emotionInference || ''
+      }));
 
-      // 현재 아이템의 내용도 포함
-      const currentItem = reflectionItems.find(item => item.id === itemId);
-      const currentContent = currentItem?.content?.trim() || '';
-
-      const response = await fetch('/api/generate-keywords', {
+      const response = await fetch('/api/generate-reflection-hints', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          highlightedTexts,
-          userAnswers,
-          userExplanations,
-          currentReflection: currentContent, // 현재 작성 중인 고민 내용 추가
+          characterName,
+          highlightedData: highlightData,
+          letterContent: letterParagraphs.join(' ')
         }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to generate keywords');
+        throw new Error('Failed to generate reflection hints');
       }
 
       const data = await response.json();
-      
-      // 해당 아이템의 키워드만 업데이트
-      setReflectionItems(prev => prev.map(item => 
-        item.id === itemId 
-          ? { ...item, keywords: data.keywords || [], isLoadingKeywords: false }
-          : item
-      ));
+      setReflectionHints(data.hints || []);
     } catch (error) {
-      console.error('Error generating keywords:', error);
-      // 에러 시 기본 키워드 제공
-      const defaultKeywords = ['집중력 부족', '업무 효율성', '동료 관계', '자신감 하락', '우선순위 설정'];
-      setReflectionItems(prev => prev.map(item => 
-        item.id === itemId 
-          ? { ...item, keywords: defaultKeywords, isLoadingKeywords: false }
-          : item
-      ));
+      console.error('Error generating reflection hints:', error);
+      // 기본 힌트 제공
+      setReflectionHints([
+        '집중력 부족으로 인한 어려움',
+        '업무 효율성 문제',
+        '동료와의 관계 걱정',
+        '자신감 하락',
+        '우선순위 설정의 어려움'
+      ]);
+    } finally {
+      setIsLoadingHints(false);
     }
   };
+
 
   // 로그 추가 함수
   const addLog = (message: string) => {
@@ -720,36 +793,17 @@ const Writing: React.FC = () => {
 
       addLog(`감정: ${emotionResult?.hasEmotion ? 'true' : 'false'}, 비난: ${blameResult?.hasBlamePattern ? 'true' : 'false'}`);
 
-      // 검사 결과에 따라 적절한 단계로 설정
-      if (!emotionResult?.hasEmotion && !blameResult?.hasBlamePattern) {
-        // 둘 다 warning 필요: emotion만 먼저 보여주기
-        setReflectionItems(prev => prev.map(item => 
-          item.id === itemId 
-            ? { ...item, inspectionStep: 1, isProcessing: false }
-            : item
-        ));
-      } else if (emotionResult?.hasEmotion && !blameResult?.hasBlamePattern) {
-        // emotion은 true, blame은 false: blame warning 제공
-        setReflectionItems(prev => prev.map(item => 
-          item.id === itemId 
-            ? { ...item, inspectionStep: 2, isProcessing: false }
-            : item
-        ));
-      } else if (!emotionResult?.hasEmotion && blameResult?.hasBlamePattern) {
-        // emotion은 false, blame은 true: emotion warning만 제공
-        setReflectionItems(prev => prev.map(item => 
-          item.id === itemId 
-            ? { ...item, inspectionStep: 1, isProcessing: false }
-            : item
-        ));
-      } else {
-        // 둘 다 true: 완료
-        setReflectionItems(prev => prev.map(item => 
-          item.id === itemId 
-            ? { ...item, inspectionStep: 3, isProcessing: false, completedAt: new Date().toISOString() }
-            : item
-        ));
-      }
+      // 둘 다 완료되면 inspectionStep 3으로 설정 (한 번에 다 보여주기)
+      setReflectionItems(prev => prev.map(item => 
+        item.id === itemId 
+          ? { 
+              ...item, 
+              inspectionStep: 3, 
+              isProcessing: false, 
+              completedAt: new Date().toISOString() 
+            }
+          : item
+      ));
 
     } catch (error) {
       console.error('Error processing reflection:', error);
@@ -846,6 +900,7 @@ const Writing: React.FC = () => {
         body: JSON.stringify({
           reflectionContent: currentItem.content,
           originalLetter: letterParagraphs.join(' '),
+          characterName: characterName,
         }),
       });
 
@@ -902,18 +957,124 @@ const Writing: React.FC = () => {
   };
 
   // Step 3: 해결책 입력 핸들러
-  const handleSolutionInput = (e: React.ChangeEvent<HTMLTextAreaElement>, itemId: string) => {
+  const handleSolutionInput = (e: React.ChangeEvent<HTMLTextAreaElement>, itemId: string, solutionId: string) => {
     const value = e.target.value;
+    const textarea = e.target;
+    
+    // 높이 자동 조절
+    textarea.style.height = 'auto';
+    textarea.style.maxHeight = 'none';
+    textarea.style.height = Math.max(50, textarea.scrollHeight) + 'px';
+    
     setReflectionItems(prev => prev.map(item => 
       item.id === itemId 
-        ? { ...item, solutionContent: value }
+        ? { 
+            ...item, 
+            solutionInputs: (item.solutionInputs || []).map(input => 
+              input.id === solutionId ? { ...input, content: value } : input
+            )
+          }
         : item
     ));
   };
 
+  // 해결책 입력 추가
+  const addSolutionInput = (itemId: string) => {
+    setReflectionItems(prev => prev.map(item => 
+      item.id === itemId 
+        ? { 
+            ...item, 
+            solutionInputs: [...(item.solutionInputs || []), { id: Date.now().toString(), content: '', showStrengthHelper: false }]
+          }
+        : item
+    ));
+  };
+
+  // 해결책 입력 삭제
+  const removeSolutionInput = (itemId: string, solutionId: string) => {
+    setReflectionItems(prev => prev.map(item => 
+      item.id === itemId 
+        ? { 
+            ...item, 
+            solutionInputs: (item.solutionInputs || []).filter(input => input.id !== solutionId)
+          }
+        : item
+    ));
+  };
+
+  // 강점 도우미 토글
+  const toggleStrengthHelper = (itemId: string, solutionId: string) => {
+    setReflectionItems(prev => prev.map(item => 
+      item.id === itemId 
+        ? { 
+            ...item, 
+            solutionInputs: (item.solutionInputs || []).map(input => 
+              input.id === solutionId 
+                ? { ...input, showStrengthHelper: !input.showStrengthHelper }
+                : input
+            )
+          }
+        : item
+    ));
+  };
+
+  // 강점 키워드 상태
+  const [strengthKeywords, setStrengthKeywords] = useState<string[]>([]);
+  const [isLoadingKeywords, setIsLoadingKeywords] = useState(false);
+
+  // 강점 키워드 생성 API 호출
+  const generateStrengthKeywords = async () => {
+    if (strengthItems.length === 0) return [];
+    
+    setIsLoadingKeywords(true);
+    
+    try {
+      const response = await fetch('/api/generate-strength-keywords', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          strengthItems,
+          characterName
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate keywords');
+      }
+
+      const data = await response.json();
+      setStrengthKeywords(data.keywords || []);
+      return data.keywords || [];
+    } catch (error) {
+      console.error('Error generating strength keywords:', error);
+      // 에러 시 기본 키워드 사용
+      const fallbackKeywords = ['강점', '능력', '특성'];
+      setStrengthKeywords(fallbackKeywords);
+      return fallbackKeywords;
+    } finally {
+      setIsLoadingKeywords(false);
+    }
+  };
+
+  // 강점 완료 시 키워드 생성
+  useEffect(() => {
+    if (isStrengthCompleted && strengthItems.length > 0 && strengthKeywords.length === 0) {
+      generateStrengthKeywords();
+    }
+  }, [isStrengthCompleted, strengthItems.length]);
+
   // Step 3: 개인 경험 반영 핸들러
   const handlePersonalReflectionInput = (e: React.ChangeEvent<HTMLTextAreaElement>, itemId: string) => {
     const value = e.target.value;
+    const textarea = e.target;
+    
+    // 높이 자동 조절
+    textarea.style.height = 'auto';
+    textarea.style.maxHeight = 'none';
+    textarea.style.height = Math.max(16, textarea.scrollHeight) + 'px';
+    
     setReflectionItems(prev => prev.map(item => 
       item.id === itemId 
         ? { ...item, personalReflection: value }
@@ -1075,8 +1236,8 @@ const Writing: React.FC = () => {
           {/* 1단계: 이해하기 */}
           {currentStep === 1 && (
             <div className={styles.understandingSection}>
-              <h2 className={styles.sectionTitle}>이해하기</h2>
-              <p className={styles.guideText}>편지에서 공감되는 내용을 드래그 해서 하이라이트 하고 Enter를 눌러주세요.</p>
+              <h2 className={styles.sectionTitle}>고민 이해하기</h2>
+              <p className={styles.guideText}>편지에서 {characterName}의 고민이 보이는 부분을 드래그 한 뒤 Enter를 눌러주세요.</p>
             
               <div className={styles.highlightedItemsContainer}>
                 {highlightedItems.map((item) => (
@@ -1098,9 +1259,30 @@ const Writing: React.FC = () => {
                     
                     {/* 사용자 설명 입력 필드 - 항상 표시 */}
                     <div className={styles.explanationContainer}>
+                      {/* 고민 이유 섹션 */}
                       <div className={styles.explanationSection}>
                         <label className={styles.explanationLabel}>
-                          왜 이 부분이 공감되었나요?
+                          🎯 이 부분이 {characterName}의 고민이라고 생각한 이유는 무엇인가요?
+                        </label>
+                        <textarea
+                          value={item.problemReason || ''}
+                          onChange={(e) => {
+                            const newProblemReason = e.target.value;
+                            setHighlightedItems(prev => prev.map(prevItem => 
+                              prevItem.id === item.id 
+                                ? { ...prevItem, problemReason: newProblemReason }
+                                : prevItem
+                            ));
+                          }}
+                          // placeholder={`이 부분에서 ${characterName}이 어떤 어려움이나 문제를 겪고 있다고 생각하는지 적어주세요...`}
+                          className={styles.explanationInput}
+                          spellCheck={false}
+                        />
+                      </div>
+                      
+                      <div className={styles.explanationSection}>
+                        <label className={styles.explanationLabel}>
+                          💭 {characterName}의 고민에 공감이 되셨나요? 나도 비슷한 경험이 있었나요?
                         </label>
                         <textarea
                           value={item.userExplanation || ''}
@@ -1112,7 +1294,28 @@ const Writing: React.FC = () => {
                                 : prevItem
                             ));
                           }}
-                          placeholder="하이라이트한 부분에 대한 생각이나 중요하다고 느낀 이유를 자유롭게 적어주세요..."
+                          placeholder={`${characterName}의 고민에 공감되는 부분이나 비슷한 경험이 있다면 적어주세요...`}
+                          className={styles.explanationInput}
+                          spellCheck={false}
+                        />
+                      </div>
+                      
+                      {/* 감정 유추 필드 */}
+                      <div className={styles.explanationSection}>
+                        <label className={styles.explanationLabel}>
+                        😊 {characterName}는 어떤 감정을 느꼈을지 생각해보세요.
+                        </label>
+                        <textarea
+                          value={item.emotionInference || ''}
+                          onChange={(e) => {
+                            const newEmotionInference = e.target.value;
+                            setHighlightedItems(prev => prev.map(prevItem => 
+                              prevItem.id === item.id 
+                                ? { ...prevItem, emotionInference: newEmotionInference }
+                                : prevItem
+                            ));
+                          }}
+                          placeholder={`${characterName}가 이 상황에서 어떤 감정을 느꼈을지 생각해보고 적어주세요...`}
                           className={styles.explanationInput}
                           spellCheck={false}
                         />
@@ -1167,7 +1370,7 @@ const Writing: React.FC = () => {
                 </div>
               ) : (
                 <>
-                  <p className={styles.guideText}>편지에서 화자(양양)의 강점이 보이는 부분을 드래그 해서 하이라이트 하고 Enter를 눌러주세요.</p>
+                  <p className={styles.guideText}>편지에서 {characterName}의 강점이 보이는 부분을 드래그 해서 하이라이트 하고 Enter를 눌러주세요.</p>
             
               <div className={styles.strengthItemsContainer}>
                 {strengthItems.map((item) => (
@@ -1188,10 +1391,10 @@ const Writing: React.FC = () => {
                     </div>
                     
                     {/* 강점 설명 입력 필드 */}
-                    <div className={styles.strengthDescriptionContainer}>
-                      <div className={styles.strengthDescriptionSection}>
-                        <label className={styles.strengthDescriptionLabel}>
-                          이 부분에서 어떤 강점이 보이나요?
+                    <div className={styles.explanationContainer}>
+                      <div className={styles.explanationSection}>
+                        <label className={styles.explanationLabel}>
+                          🤔 이 부분이 왜 강점이라고 생각하시나요?
                         </label>
                         <textarea
                           value={item.strengthDescription || ''}
@@ -1203,8 +1406,28 @@ const Writing: React.FC = () => {
                                 : prevItem
                             ));
                           }}
-                          placeholder="양양이가 가진 강점이나 긍정적인 면을 찾아서 적어주세요..."
-                          className={styles.strengthDescriptionInput}
+                          placeholder={`이 부분이 ${characterName}의 강점이라고 생각하는 이유를 적어주세요...`}
+                          className={styles.explanationInput}
+                          spellCheck={false}
+                        />
+                      </div>
+                      
+                      <div className={styles.explanationSection}>
+                        <label className={styles.explanationLabel}>
+                          🌟 이 강점이 어떤 상황에서 어떻게 잘 발휘될 수 있을까요?
+                        </label>
+                        <textarea
+                          value={item.strengthApplication || ''}
+                          onChange={(e) => {
+                            const newApplication = e.target.value;
+                            setStrengthItems(prev => prev.map(prevItem => 
+                              prevItem.id === item.id 
+                                ? { ...prevItem, strengthApplication: newApplication }
+                                : prevItem
+                            ));
+                          }}
+                          placeholder={`이 강점이 어디서/어떤 상황에서, 어떻게 잘 발휘될 수 있을지 적어주세요...`}
+                          className={styles.explanationInput}
                           spellCheck={false}
                         />
                       </div>
@@ -1244,27 +1467,103 @@ const Writing: React.FC = () => {
           {currentStep === 3 && (
             <div className={styles.reflectionSection}>
               <h2 className={styles.sectionTitle}>고민 정리하기</h2>
-              <p className={styles.guideText}>양양이의 고민들을 {currentUser?.nickname || '사용자'}님의 언어로 다시 표현해 보세요.</p>
+              <p className={styles.guideText}>{characterName}의 고민들을 {currentUser?.nickname || '사용자'}님의 언어로 다시 표현해 보세요.</p>
+              
+              {/* 고민 정리 힌트 섹션 */}
+              {highlightedItems.length > 0 && (
+                <div className={styles.reflectionHintsSection}>
+                  <div className={styles.reflectionHintsHeader}>
+                    <h4 className={styles.reflectionHintsTitle}>💡 이해하기 단계에서 작성한 내용을 바탕으로 한 고민 정리 힌트</h4>
+                    <button
+                      onClick={generateReflectionHints}
+                      disabled={isLoadingHints}
+                      className={styles.regenerateHintsButton}
+                    >
+                      🔄
+                    </button>
+                  </div>
+                  
+                  {isLoadingHints ? (
+                    <div className={styles.loadingContainer}>
+                      <p className={styles.loadingText}>힌트를 생성하고 있습니다...</p>
+                    </div>
+                  ) : (
+                    <div className={styles.reflectionHintsList}>
+                      {reflectionHints.map((hint, index) => (
+                        <span 
+                          key={index} 
+                          className={styles.reflectionHintTag}
+                          onClick={() => selectReflectionHint(hint)}
+                        >
+                          {hint}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               
               <div className={styles.reflectionContainer}>
-                {reflectionItems.map((item) => (
+                {reflectionItems.map((item, index) => (
                   <div key={item.id} className={styles.reflectionItem}>
-                    <div className={styles.reflectionItemHeader}>
-                      <textarea
-                        value={item.content}
-                        onChange={(e) => handleTextareaInput(e, item.id)}
-                        placeholder="여기에 편지 속에 담긴 고민을 다시 표현해보세요."
-                        className={styles.reflectionInput}
-                        rows={1}
-                        spellCheck={false}
-                        data-item-id={item.id}
-                      />
+                    {/* 고민 헤더 */}
+                    <div className={styles.reflectionItemTitle}>
+                      <div className={styles.titleAndTags}>
+                        <h4 className={styles.reflectionTitle}>🤔 고민 {index + 1}</h4>
+                        {/* 선택된 힌트 태그들과 환경적 요인 태그들 */}
+                        {((item.selectedHints && item.selectedHints.length > 0) || (item.selectedFactors && item.selectedFactors.length > 0)) && (
+                          <div className={styles.selectedTagsNextToTitle}>
+                            {/* 힌트 태그들 */}
+                            {item.selectedHints && item.selectedHints.map((hint, hintIndex) => (
+                              <span 
+                                key={`hint-${hintIndex}`}
+                                className={styles.selectedHintTag}
+                              >
+                                {hint}
+                                <button 
+                                  onClick={() => removeHintFromReflection(item.id, hint)}
+                                  className={styles.removeTagButton}
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+                            {/* 환경적 요인 태그들 */}
+                            {item.selectedFactors && item.selectedFactors.map((factor, factorIndex) => (
+                              <span 
+                                key={`factor-${factorIndex}`}
+                                className={styles.selectedFactorTagInTitle}
+                              >
+                                {factor}
+                                <button 
+                                  onClick={() => removeFactorFromReflection(item.id, factor)}
+                                  className={styles.removeTagButton}
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                       <button 
                         onClick={() => removeReflectionItem(item.id)}
                         className={styles.removeButton}
                       >
                         ×
                       </button>
+                    </div>
+                    
+                    <div className={styles.reflectionItemHeader}>
+                      <textarea
+                        value={item.content}
+                        onChange={(e) => handleTextareaInput(e, item.id)}
+                        placeholder="여기에 편지 속에 담긴 고민을 한 문장으로 표현해보세요."
+                        className={styles.reflectionInput}
+                        rows={1}
+                        spellCheck={false}
+                        data-item-id={item.id}
+                      />
                     </div>
                     
                     {/* 선택된 태그 표시 */}
@@ -1287,86 +1586,77 @@ const Writing: React.FC = () => {
                       </div>
                     )}
                     
-                    {/* 키워드 힌트 섹션 */}
-                    <div className={styles.keywordsSection}>
-                      <div className={styles.keywordsHeader}>
-                        <h4 className={styles.keywordsTitle}>💡 고민 정리 힌트</h4>
-                        <button
-                          onClick={() => generateReflectionKeywords(item.id)}
-                          disabled={item.isLoadingKeywords}
-                          className={styles.regenerateKeywordsButton}
-                        >
-                          🔄
-                        </button>
-                      </div>
-                      
-                      {item.isLoadingKeywords ? (
-                        <div className={styles.loadingContainer}>
-                          <p className={styles.loadingText}>키워드를 생성하고 있습니다...</p>
-                        </div>
-                      ) : (
-                        <div className={styles.keywordsList}>
-                          {(item.keywords || []).map((keyword, index) => (
-                            <span 
-                              key={index} 
-                              className={styles.keywordTag}
-                              onClick={() => addKeywordToReflection(item.id, keyword)}
-                            >
-                              {keyword}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
 
-                    {/* 1단계: 감정 검사 결과 */}
-                    {(item.inspectionStep === 1 || (item.inspectionStep === 2 && !item.emotionCheckResult?.hasEmotion)) && 
-                     item.emotionCheckResult && !item.emotionCheckResult.hasEmotion && (
-                      <div className={styles.emotionSuggestion}>
-                        <div className={styles.suggestionHeader}>
-                          <span className={styles.suggestionIcon}>💭</span>
-                          <h5 className={styles.suggestionTitle}>
-                            {item.emotionCheckResult.situationSummary || "이 상황"}에서 양양은 어떤 감정을 느꼈을지도 추가해볼까요?
-                          </h5>
-                        </div>
-                      </div>
-                    )}
+                    {/* 검사 결과 표시 - 한 번에 모두 보여주기 */}
+                    {item.inspectionStep === 3 && (
+                      <div className={styles.inspectionResults}>
+                        {/* 감정 검사 결과 */}
+                        {item.emotionCheckResult && !item.emotionCheckResult.hasEmotion && (
+                          <div className={styles.emotionSuggestion}>
+                            <div className={styles.suggestionHeader}>
+                              <span className={styles.suggestionIcon}>💭</span>
+                              <h5 className={styles.suggestionTitle}>
+                                {item.emotionCheckResult.situationSummary || "이 상황"}에서 양양은 어떤 감정을 느꼈을지도 추가해볼까요?
+                              </h5>
+                            </div>
+                          </div>
+                        )}
 
-                    {/* 2단계: 비난 패턴 검사 결과 */}
-                    {(item.inspectionStep === 2 || item.inspectionStep === 3) && 
-                     item.blameCheckResult && item.blameCheckResult.hasBlamePattern && (
-                      <div className={styles.blameWarning}>
-                        <div className={styles.warningHeader}>
-                          <span className={styles.warningIcon}>⚠️</span>
-                          <h5 className={styles.warningTitle}>관점 확장 제안</h5>
-                        </div>
-                        <p className={styles.warningText}>
-                          {item.blameCheckResult.warning}
-                        </p>
-                        
-                        {item.blameCheckResult.environmentalFactors && item.blameCheckResult.environmentalFactors.length > 0 && (
-                          <div className={styles.environmentalFactors}>
-                            <div className={styles.factorsHeader}>
-                              <h6 className={styles.factorsTitle}>고려해볼 주변 요인들:</h6>
-                              <button
-                                onClick={() => regenerateEnvironmentalFactors(item.id)}
-                                disabled={item.blameCheckResult.isRegenerating}
-                                className={styles.regenerateFactorsButton}
+                        {/* 비난 패턴 검사 결과 */}
+                        {item.blameCheckResult && item.blameCheckResult.hasBlamePattern && (
+                          <div className={styles.blameWarning}>
+                            <div className={styles.warningHeader}>
+                              <div className={styles.warningTitleSection}>
+                                <span className={styles.warningIcon}>⚠️</span>
+                                <h5 className={styles.warningTitle}>관점 확장 제안</h5>
+                              </div>
+                              <button 
+                                className={styles.expandToggle}
+                                onClick={() => {
+                                  setReflectionItems(prev => prev.map(prevItem => 
+                                    prevItem.id === item.id 
+                                      ? { ...prevItem, blameWarningExpanded: !prevItem.blameWarningExpanded }
+                                      : prevItem
+                                  ));
+                                }}
                               >
-                                🔄
+                                {item.blameWarningExpanded ? 'v' : '>'}
                               </button>
                             </div>
-                            <div className={styles.factorsList}>
-                              {item.blameCheckResult.environmentalFactors.map((factor, index) => (
-                                <span 
-                                  key={index} 
-                                  className={styles.factorTag}
-                                  onClick={() => addFactorToReflection(item.id, factor)}
-                                >
-                                  {factor}
-                                </span>
-                              ))}
-                            </div>
+                            
+                            {item.blameWarningExpanded && (
+                              <>
+                                <p className={styles.warningText}>
+                                  {item.blameCheckResult.warning}
+                                </p>
+                                
+                                {item.blameCheckResult.environmentalFactors && item.blameCheckResult.environmentalFactors.length > 0 && (
+                                  <div className={styles.environmentalFactors}>
+                                    <div className={styles.factorsHeader}>
+                                      <h6 className={styles.factorsTitle}>고려해볼 주변 요인들:</h6>
+                                      <button
+                                        onClick={() => regenerateEnvironmentalFactors(item.id)}
+                                        disabled={item.blameCheckResult.isRegenerating}
+                                        className={styles.regenerateFactorsButton}
+                                      >
+                                        🔄
+                                      </button>
+                                    </div>
+                                    <div className={styles.factorsList}>
+                                      {item.blameCheckResult.environmentalFactors.map((factor, index) => (
+                                        <span 
+                                          key={index} 
+                                          className={styles.factorTag}
+                                          onClick={() => addFactorToReflection(item.id, factor)}
+                                        >
+                                          {factor}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1390,7 +1680,7 @@ const Writing: React.FC = () => {
                 ))}
                 
                 <button
-                  onClick={addReflectionItem}
+                  onClick={() => addReflectionItem()}
                   className={styles.addReflectionButton}
                 >
                   + 새로운 고민 추가하기
@@ -1438,7 +1728,7 @@ const Writing: React.FC = () => {
                         <h4 className={styles.problemTitle}>📝 정리한 고민 {index + 1}</h4>
                         <div className={styles.problemContent}>{item.content}</div>
                         
-                        {/* 검사 결과 표시 */}
+                        {/* 검사 결과 표시
                         {(item.emotionCheckResult || item.blameCheckResult) && (
                           <div className={styles.problemInsights}>
                             {item.emotionCheckResult && !item.emotionCheckResult.hasEmotion && (
@@ -1452,7 +1742,7 @@ const Writing: React.FC = () => {
                               </div>
                             )}
                           </div>
-                        )}
+                        )} */}
                       </div>
                       
                       {/* 개인 경험 반영 섹션 */}
@@ -1470,17 +1760,69 @@ const Writing: React.FC = () => {
 
                       <div className={styles.solutionInput}>
                         <h4 className={styles.solutionTitle}>💡 {characterName}에게 조언해주기</h4>
-                        <textarea
-                          value={item.solutionContent || ''}
-                          onChange={(e) => handleSolutionInput(e, item.id)}
-                          placeholder={`위의 개인 경험과 AI 추천을 참고하여 ${characterName}에게 적절한 조언을 작성해보세요.
-• 구체적이고 실행 가능한 방안을 제시해보세요
-• 단계별로 나누어서 설명해보세요
-• ${characterName}의 상황과 감정을 고려해보세요`}
-                          className={styles.solutionTextarea}
-                          rows={4}
-                          spellCheck={false}
-                        />
+                        <p className={styles.solutionGuideText}>
+                        {currentUser?.nickname || '사용자'}님의 경험과 AI 추천을 참고해서 {characterName}에게 구체적이고 실행 가능한 조언을 해주세요.
+                        </p>
+                        
+                        {/* 해결책 입력들 */}
+                        {(item.solutionInputs || []).map((solutionInput) => (
+                          <div key={solutionInput.id} className={styles.solutionInputItem}>
+                            <textarea
+                              value={solutionInput.content}
+                              onChange={(e) => handleSolutionInput(e, item.id, solutionInput.id)}
+                              onFocus={() => !solutionInput.showStrengthHelper && toggleStrengthHelper(item.id, solutionInput.id)}
+                              placeholder="고민을 해결할 수 있는 방법을 작성해주세요."
+                              className={styles.solutionTextarea}
+                              rows={1}
+                              spellCheck={false}
+                            />
+                            {(item.solutionInputs || []).length > 1 && (
+                              <button 
+                                onClick={() => removeSolutionInput(item.id, solutionInput.id)}
+                                className={styles.removeSolutionButton}
+                              >
+                                ×
+                              </button>
+                            )}
+                            
+                            {/* 강점 도우미 박스 */}
+                            {solutionInput.showStrengthHelper && (
+                              <div className={styles.strengthHelper}>
+                                <div className={styles.strengthHelperHeader}>
+                                  <h5 className={styles.strengthHelperTitle}>💪 {characterName}의 강점을 고민 해결 방법에 활용해보세요!</h5>
+                                  <button 
+                                    onClick={() => toggleStrengthHelper(item.id, solutionInput.id)}
+                                    className={styles.closeHelperButton}
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                                <p className={styles.strengthHelperGuide}>
+                                  {currentUser?.nickname || '사용자'}님이 찾아주신 {characterName}의 강점들을 아래에 정리해 보았어요. 이 강점들을 활용해서 고민을 해결할 방안을 찾아보세요.
+                                </p>
+                                <div className={styles.strengthKeywords}>
+                                  {isLoadingKeywords ? (
+                                    <span className={styles.loadingKeywords}>키워드를 생성하고 있습니다...</span>
+                                  ) : (
+                                    strengthKeywords.map((keyword, index) => (
+                                      <span key={index} className={styles.strengthKeyword}>
+                                        {keyword}
+                                      </span>
+                                    ))
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                        
+                        {/* 추가 버튼 */}
+                        <button 
+                          onClick={() => addSolutionInput(item.id)}
+                          className={styles.addSolutionButton}
+                        >
+                          + 조언 추가하기
+                        </button>
                         
                         {/* 선택된 AI 제안 태그 표시 */}
                         {item.selectedAiSuggestions && item.selectedAiSuggestions.length > 0 && (

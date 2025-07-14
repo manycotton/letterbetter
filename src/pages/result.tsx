@@ -6,7 +6,9 @@ const Result: React.FC = () => {
   const router = useRouter();
   const { answers, nickname, userId, answersId } = router.query;
   const [parsedAnswers, setParsedAnswers] = useState<string[]>([]);
-  const [combinedText, setCombinedText] = useState('');
+  const [strengthContent, setStrengthContent] = useState('');
+  const [strengthTagContents, setStrengthTagContents] = useState<{tag: string, content: string}[]>([]);
+  const [concernKeyword, setConcernKeyword] = useState('');
 
   useEffect(() => {
     if (answers && typeof answers === 'string') {
@@ -20,10 +22,43 @@ const Result: React.FC = () => {
   }, [answers]);
 
   useEffect(() => {
-    if (parsedAnswers.length >= 3) {
-      // 1번과 3번 답변을 합쳐서 줄글로 만들기
-      const text = `${parsedAnswers[0]} ${parsedAnswers[2]}`;
-      setCombinedText(text);
+    if (parsedAnswers.length >= 4) {
+      // 2번 답변(강점) 파싱
+      if (parsedAnswers[1]) {
+        const strengthAnswer = parsedAnswers[1];
+        
+        // [태그명] 패턴으로 태그와 내용을 분리
+        const parts = strengthAnswer.split(/\[([^\]]+)\]/);
+        const tagContents: {tag: string, content: string}[] = [];
+        let generalContent = '';
+        
+        for (let i = 0; i < parts.length; i++) {
+          if (i % 2 === 0) {
+            // 일반 텍스트 부분
+            if (parts[i].trim() && i === 0) {
+              generalContent = parts[i].trim();
+            }
+          } else {
+            // 태그 부분
+            const tag = parts[i];
+            const content = (parts[i + 1] || '').trim();
+            if (tag && content) {
+              tagContents.push({ tag, content });
+            }
+          }
+        }
+        
+        setStrengthContent(generalContent);
+        setStrengthTagContents(tagContents);
+      }
+      
+      // 3번 답변에서 고민 키워드 추출
+      if (parsedAnswers[2]) {
+        // 첫 번째 키워드 또는 전체 태그를 사용
+        const concernAnswer = parsedAnswers[2];
+        const firstKeyword = concernAnswer.split(',')[0].trim();
+        setConcernKeyword(firstKeyword);
+      }
     }
   }, [parsedAnswers]);
 
@@ -55,9 +90,51 @@ const Result: React.FC = () => {
   return (
     <div className={styles.container}>
       <div className={styles.content}>
-        <div className={styles.textDisplay}>
-          {combinedText}
-        </div>
+        {/* 1. 자기 소개 섹션 */}
+        {parsedAnswers[0] && (
+          <div className={styles.section}>
+            <h2 className={styles.sectionTitle}>👋 자기 소개</h2>
+            <div className={styles.sectionContent}>
+              {parsedAnswers[0]}
+            </div>
+          </div>
+        )}
+        
+        {/* 2. 나의 강점 섹션 */}
+        {(strengthContent || strengthTagContents.length > 0) && (
+          <div className={styles.section}>
+            <h2 className={styles.sectionTitle}>🌟 나의 강점</h2>
+            <div className={styles.sectionContent}>
+              {strengthContent && (
+                <div className={styles.strengthGeneral}>
+                  {strengthContent}
+                </div>
+              )}
+              {strengthTagContents.length > 0 && (
+                <div className={styles.strengthTags}>
+                  {strengthTagContents.map((item, index) => (
+                    <div key={index} className={styles.strengthTagItem}>
+                      <span className={styles.strengthTag}>{item.tag}</span>
+                      <span className={styles.strengthTagContent}>{item.content}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        
+        {/* 3. 나의 고민 섹션 */}
+        {parsedAnswers[3] && (
+          <div className={styles.section}>
+            <h2 className={styles.sectionTitle}>
+              💭 나의 고민: {concernKeyword}
+            </h2>
+            <div className={styles.sectionContent}>
+              {parsedAnswers[3]}
+            </div>
+          </div>
+        )}
         
         <div className={styles.buttonContainer}>
           <button 

@@ -2,6 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import styles from '../styles/Letter.module.css';
 
+interface GeneratedLetter {
+  characterName: string;
+  age: number;
+  occupation: string;
+  letterContent: string[];
+  usedStrengths: string[];
+}
+
 const Letter: React.FC = () => {
   const router = useRouter();
   const { nickname, userId, answersId } = router.query;
@@ -16,13 +24,80 @@ const Letter: React.FC = () => {
   const [modalTypingComplete, setModalTypingComplete] = useState(false);
   const [lastEnterTime, setLastEnterTime] = useState(0);
   const [currentParagraphIndex, setCurrentParagraphIndex] = useState(0);
+  
+  // AI 생성된 편지 데이터
+  const [generatedLetter, setGeneratedLetter] = useState<GeneratedLetter | null>(null);
+  const [isLoadingLetter, setIsLoadingLetter] = useState(false);
+  const [letterError, setLetterError] = useState<string | null>(null);
 
-  const letterParagraphs = [
+  // 기본값 (로딩 중이거나 에러 시 사용)
+  const defaultLetterParagraphs = [
     "안녕하세요. 저는 현재 직장에서 일하고 있는 양양입니다. 저는 ADHD를 가지고 있어요. 요즘 들어 직장에서 업무를 수행하는 데 많은 어려움을 겪고 있어, 조언을 구하고자 이렇게 편지를 쓰게 되었습니다.",
     "업무에 집중하기가 너무 힘듭니다. 작은 소리에도 쉽게 산만해지고, 한 가지 일에 꾸준히 몰두하기가 어렵습니다. 이로 인해 마감 기한을 놓치거나, 실수가 잦아지는 등 업무 효율이 떨어지고 있습니다. 해야 할 일이 많을 때는 어디서부터 시작해야 할지 막막하고, 우선순위를 정하는 것도 버겁게 느껴집니다.",
     "또한, 제 행동으로 인해 동료들에게 피해를 주는 것은 아닐까 하는 걱정이 큽니다. 중요한 회의 내용을 놓치거나, 다른 사람의 말을 도중에 끊는 경우도 종종 있어 난처할 때가 많습니다. 이러한 상황들이 반복되면서 자신감도 떨어지고, 스스로에게 실망하는 날들이 늘어나고 있습니다.",
     "ADHD 증상으로 인해 직장 생활에 어려움을 겪는 것이 저만의 문제는 아니라는 것을 알고 있습니다. 하지만 매일같이 반복되는 이러한 상황들 속에서 어떻게 현명하게 대처해야 할지 막막하기만 합니다."
   ];
+
+  const letterParagraphs = generatedLetter?.letterContent || defaultLetterParagraphs;
+
+  // 편지 생성 함수
+  const generateLetter = async () => {
+    if (!answersId) return;
+
+    setIsLoadingLetter(true);
+    setLetterError(null);
+
+    try {
+      // 1. 사용자 답변 가져오기
+      const answersResponse = await fetch(`/api/answers/get?answersId=${answersId}`);
+      if (!answersResponse.ok) {
+        throw new Error('Failed to fetch user answers');
+      }
+      const answersData = await answersResponse.json();
+      
+      if (!answersData.answers || answersData.answers.length === 0) {
+        throw new Error('No answers found');
+      }
+
+      // 답변을 새로운 형태로 변환
+      const userAnswers = {
+        answers: answersData.answers || []
+      };
+
+      // 2. 편지 생성 API 호출
+      const letterResponse = await fetch('/api/generate-letter', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          answersId,
+          userAnswers,
+          userNickname: nickname
+        }),
+      });
+
+      if (!letterResponse.ok) {
+        throw new Error('Failed to generate letter');
+      }
+
+      const letterData = await letterResponse.json();
+      setGeneratedLetter(letterData.letter);
+
+    } catch (error) {
+      console.error('Error generating letter:', error);
+      setLetterError(error instanceof Error ? error.message : 'Unknown error occurred');
+    } finally {
+      setIsLoadingLetter(false);
+    }
+  };
+
+  // 페이지 로드 시 편지 생성
+  useEffect(() => {
+    if (answersId && !generatedLetter && !isLoadingLetter) {
+      generateLetter();
+    }
+  }, [answersId]);
 
   useEffect(() => {
     if (!isTyping) return;
@@ -133,11 +208,11 @@ const Letter: React.FC = () => {
   useEffect(() => {
     if (!showModal) return;
 
-    const characterName = "양양이"; // 캐릭터 이름 하드코딩
+    const characterName = generatedLetter?.characterName || "양양이";
     const modalMessage = `${characterName}의 편지에 조언을 담아 답장해주세요. ${nickname}님의 마음이 담긴 조언이 큰 힘이 될거에요!`;
     setModalText(modalMessage);
     setModalTypingComplete(true);
-  }, [showModal, nickname]);
+  }, [showModal, nickname, generatedLetter]);
 
   const handleEnterClick = () => {
     setShowModal(true);
@@ -157,7 +232,7 @@ const Letter: React.FC = () => {
   const handleReadLetter = () => {
     setIsShaking(true);
     
-    // 3초 후 fadeout 시작
+    // 2초 후 fadeout 시작
     setTimeout(() => {
       setIsFading(true);
       
@@ -167,7 +242,7 @@ const Letter: React.FC = () => {
         setIsTyping(true);
         setCurrentParagraphIndex(0); // 문단 인덱스 초기화
       }, 1000); // fadeout 시간 1초
-    }, 3000);
+    }, 2000);
   };
 
   // 편지 내용 렌더링
@@ -184,13 +259,31 @@ const Letter: React.FC = () => {
           <div className={styles.characterInfo}>
             <img 
               src="/images/profile/sheep.png" 
-              alt="양양이"
+              alt={generatedLetter?.characterName || "양양이"}
               className={styles.characterImage}
             />
             <div className={styles.characterDetails}>
-              <h3 className={styles.characterName}>양양이</h3>
-              <p className={styles.characterAge}>나이: 24</p>
-              <p className={styles.characterJob}>직업: 프리랜서 디자이너</p>
+              <h3 className={styles.characterName}>
+                {generatedLetter?.characterName || "양양이"}
+              </h3>
+              <p className={styles.characterAge}>
+                나이: {generatedLetter?.age || 24}
+              </p>
+              <p className={styles.characterJob}>
+                직업: {generatedLetter?.occupation || "프리랜서 디자이너"}
+              </p>
+              {generatedLetter?.usedStrengths && (
+                <div className={styles.strengthsInfo}>
+                  <p className={styles.strengthsTitle}>🌟 사용된 강점:</p>
+                  <ul className={styles.strengthsList}>
+                    {generatedLetter.usedStrengths.map((strength, index) => (
+                      <li key={index} className={styles.strengthItem}>
+                        {strength}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           </div>
           <div className={styles.letterTextContainer}>
@@ -222,7 +315,7 @@ const Letter: React.FC = () => {
               </div>
               {modalTypingComplete && (
                 <button onClick={handleReplyClick} className={styles.replyButton}>
-                  응! 내가 양양이 에게 답장을 적어줄게
+                  응! 내가 {generatedLetter?.characterName || "양양이"}에게 답장을 적어줄게
                 </button>
               )}
             </div>
@@ -243,13 +336,26 @@ const Letter: React.FC = () => {
       <div className={styles.content}>
         {!isShaking && (
           <h1 className={styles.title}>
-            {nickname}님께 편지가 도착했습니다.
+            {isLoadingLetter ? (
+              <>
+                편지를 작성하고 있습니다...<br />
+                잠시만 기다려주세요.
+              </>
+            ) : (
+              `${nickname}님께 편지가 도착했습니다.`
+            )}
           </h1>
         )}
         
         <div className={styles.letterContainer}>
           <img 
-            src={isShaking ? "/images/letter-shake.gif" : "/images/letter.png"}
+            src={
+              isLoadingLetter 
+                ? "/images/letter-white-shake.gif" 
+                : isShaking 
+                  ? "/images/letter-white-shake.gif" 
+                  : "/images/letter-white.png"
+            }
             alt="편지"
             className={`${styles.letter} ${isFading ? styles.fadeout : ''}`}
             onError={(e) => {
@@ -261,12 +367,34 @@ const Letter: React.FC = () => {
         </div>
         
         {!isShaking && (
-          <button 
-            onClick={handleReadLetter}
-            className={styles.readButton}
-          >
-            응, 편지를 읽어볼래
-          </button>
+          <>
+            {letterError ? (
+              <div className={styles.errorMessage}>
+                <p>편지 생성 중 오류가 발생했습니다.</p>
+                <p>{letterError}</p>
+                <button 
+                  onClick={generateLetter}
+                  className={styles.retryButton}
+                >
+                  다시 시도
+                </button>
+                <button 
+                  onClick={handleReadLetter}
+                  className={styles.readButton}
+                >
+                  기본 편지 읽기
+                </button>
+              </div>
+            ) : !isLoadingLetter && (
+              <button 
+                onClick={handleReadLetter}
+                className={styles.readButton}
+                disabled={!generatedLetter && !letterError}
+              >
+                응, 편지를 읽어볼래
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>
