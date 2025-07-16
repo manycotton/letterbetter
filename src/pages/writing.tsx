@@ -961,10 +961,12 @@ const Writing: React.FC = () => {
     const value = e.target.value;
     const textarea = e.target;
     
-    // 높이 자동 조절
-    textarea.style.height = 'auto';
+    // 높이 자동 조절 - 최소 높이를 24px로 고정
+    textarea.style.height = '24px';
     textarea.style.maxHeight = 'none';
-    textarea.style.height = Math.max(50, textarea.scrollHeight) + 'px';
+    if (textarea.scrollHeight > 24) {
+      textarea.style.height = textarea.scrollHeight + 'px';
+    }
     
     setReflectionItems(prev => prev.map(item => 
       item.id === itemId 
@@ -1021,6 +1023,15 @@ const Writing: React.FC = () => {
   // 강점 키워드 상태
   const [strengthKeywords, setStrengthKeywords] = useState<string[]>([]);
   const [isLoadingKeywords, setIsLoadingKeywords] = useState(false);
+  
+  // 선택된 강점 키워드 상태 (solutionInput별로 관리)
+  const [selectedStrengthKeywords, setSelectedStrengthKeywords] = useState<{[solutionId: string]: string[]}>({});
+  
+  // 선택된 강점 태그 리스트 상태 (전역)
+  const [selectedStrengthTags, setSelectedStrengthTags] = useState<string[]>([]);
+  
+  // 선택된 해결방법 카테고리 상태
+  const [selectedSolutionCategories, setSelectedSolutionCategories] = useState<string[]>([]);
 
   // 강점 키워드 생성 API 호출
   const generateStrengthKeywords = async () => {
@@ -1065,6 +1076,84 @@ const Writing: React.FC = () => {
     }
   }, [isStrengthCompleted, strengthItems.length]);
 
+  // 강점 도우미 외부 클릭 시 닫기
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      // 강점 도우미가 열려있는 항목들 확인
+      reflectionItems.forEach(item => {
+        if (item.solutionInputs) {
+          item.solutionInputs.forEach(solutionInput => {
+            if (solutionInput.showStrengthHelper) {
+              const helperElement = document.querySelector(`[data-solution-id="${solutionInput.id}"] .${styles.strengthHelper}`);
+              const inputElement = document.querySelector(`[data-solution-id="${solutionInput.id}"] .${styles.solutionInputField}`);
+              
+              if (helperElement && inputElement && 
+                  !helperElement.contains(event.target as Node) &&
+                  !inputElement.contains(event.target as Node)) {
+                toggleStrengthHelper(item.id, solutionInput.id);
+              }
+            }
+          });
+        }
+      });
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [reflectionItems]);
+
+  // 강점 키워드 선택 핸들러
+  const handleStrengthKeywordSelect = (solutionId: string, keyword: string) => {
+    setSelectedStrengthKeywords(prev => {
+      const currentKeywords = prev[solutionId] || [];
+      if (currentKeywords.includes(keyword)) {
+        // 이미 선택된 키워드면 제거
+        return {
+          ...prev,
+          [solutionId]: currentKeywords.filter(k => k !== keyword)
+        };
+      } else {
+        // 새로운 키워드 추가
+        return {
+          ...prev,
+          [solutionId]: [...currentKeywords, keyword]
+        };
+      }
+    });
+  };
+  
+  // 강점 태그 리스트 선택 핸들러
+  const handleStrengthTagSelect = (keyword: string) => {
+    setSelectedStrengthTags(prev => {
+      if (prev.includes(keyword)) {
+        return prev.filter(k => k !== keyword);
+      } else {
+        return [...prev, keyword];
+      }
+    });
+  };
+  
+  // 해결방법 카테고리 선택 핸들러
+  const handleSolutionCategorySelect = (category: string) => {
+    setSelectedSolutionCategories(prev => {
+      if (prev.includes(category)) {
+        return prev.filter(c => c !== category);
+      } else {
+        return [...prev, category];
+      }
+    });
+  };
+
+  // 선택된 강점 키워드 제거
+  const removeSelectedStrengthKeyword = (solutionId: string, keyword: string) => {
+    setSelectedStrengthKeywords(prev => ({
+      ...prev,
+      [solutionId]: (prev[solutionId] || []).filter(k => k !== keyword)
+    }));
+  };
+
   // Step 3: 개인 경험 반영 핸들러
   const handlePersonalReflectionInput = (e: React.ChangeEvent<HTMLTextAreaElement>, itemId: string) => {
     const value = e.target.value;
@@ -1082,51 +1171,8 @@ const Writing: React.FC = () => {
     ));
   };
 
-  // Step 3: AI 대안 추천 생성 함수
-  const generateAiSuggestions = async (itemId: string) => {
-    const currentItem = reflectionItems.find(item => item.id === itemId);
-    if (!currentItem) return;
-
-    setReflectionItems(prev => prev.map(item => 
-      item.id === itemId 
-        ? { ...item, isLoadingAiSuggestions: true }
-        : item
-    ));
-
-    try {
-      const response = await fetch('/api/generate-solutions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          problemContent: currentItem.content,
-          personalReflection: currentItem.personalReflection,
-          characterName: characterName,
-          letterContent: letterParagraphs.join(' ')
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to generate AI suggestions');
-      }
-
-      const data = await response.json();
-      
-      setReflectionItems(prev => prev.map(item => 
-        item.id === itemId 
-          ? { ...item, aiSuggestions: data.suggestions || [], isLoadingAiSuggestions: false }
-          : item
-      ));
-    } catch (error) {
-      console.error('Error generating AI suggestions:', error);
-      setReflectionItems(prev => prev.map(item => 
-        item.id === itemId 
-          ? { ...item, isLoadingAiSuggestions: false }
-          : item
-      ));
-    }
-  };
+  // Step 3: AI 대안 추천 생성 함수 (제거됨)
+  // const generateAiSuggestions = async (itemId: string) => { ... };
 
   // Step 3: 선택된 AI 제안 제거
   const removeSelectedAiSuggestion = (itemId: string, suggestionToRemove: AiSuggestion) => {
@@ -1151,32 +1197,8 @@ const Writing: React.FC = () => {
     }
   };
 
-  // Step 3: AI 제안 키워드를 해결책에 추가
-  const addAiSuggestionToSolution = (itemId: string, suggestion: AiSuggestion) => {
-    const currentItem = reflectionItems.find(item => item.id === itemId);
-    if (currentItem) {
-      const currentContent = currentItem.solutionContent?.trim() || '';
-      const newContent = currentContent 
-        ? `${currentContent} ${suggestion.text}` 
-        : suggestion.text;
-      
-      // 선택된 AI 제안 목록에 추가
-      const selectedSuggestions = currentItem.selectedAiSuggestions || [];
-      const isAlreadySelected = selectedSuggestions.some(s => s.text === suggestion.text);
-      
-      if (!isAlreadySelected) {
-        setReflectionItems(prev => prev.map(item => 
-          item.id === itemId 
-            ? { 
-                ...item, 
-                solutionContent: newContent,
-                selectedAiSuggestions: [...selectedSuggestions, suggestion]
-              }
-            : item
-        ));
-      }
-    }
-  };
+  // Step 3: AI 제안 키워드를 해결책에 추가 (제거됨)
+  // const addAiSuggestionToSolution = (itemId: string, suggestion: AiSuggestion) => { ... };
 
 
 
@@ -1766,24 +1788,47 @@ const Writing: React.FC = () => {
                         
                         {/* 해결책 입력들 */}
                         {(item.solutionInputs || []).map((solutionInput) => (
-                          <div key={solutionInput.id} className={styles.solutionInputItem}>
-                            <textarea
-                              value={solutionInput.content}
-                              onChange={(e) => handleSolutionInput(e, item.id, solutionInput.id)}
-                              onFocus={() => !solutionInput.showStrengthHelper && toggleStrengthHelper(item.id, solutionInput.id)}
-                              placeholder="고민을 해결할 수 있는 방법을 작성해주세요."
-                              className={styles.solutionTextarea}
-                              rows={1}
-                              spellCheck={false}
-                            />
-                            {(item.solutionInputs || []).length > 1 && (
-                              <button 
-                                onClick={() => removeSolutionInput(item.id, solutionInput.id)}
-                                className={styles.removeSolutionButton}
-                              >
-                                ×
-                              </button>
-                            )}
+                          <div key={solutionInput.id} className={styles.solutionInputItem} data-solution-id={solutionInput.id}>
+                            <div className={styles.solutionInputField}>
+                              <div className={styles.inputContent}>
+                                {/* 선택된 강점 키워드 칩들 */}
+                                {(selectedStrengthKeywords[solutionInput.id] || []).map((keyword, index) => (
+                                  <span 
+                                    key={index} 
+                                    className={styles.strengthChip}
+                                  >
+                                    {keyword}
+                                    <button 
+                                      onClick={() => removeSelectedStrengthKeyword(solutionInput.id, keyword)}
+                                      className={styles.chipRemoveButton}
+                                      type="button"
+                                    >
+                                      ×
+                                    </button>
+                                  </span>
+                                ))}
+                                
+                                <textarea
+                                  value={solutionInput.content}
+                                  onChange={(e) => handleSolutionInput(e, item.id, solutionInput.id)}
+                                  onFocus={() => !solutionInput.showStrengthHelper && toggleStrengthHelper(item.id, solutionInput.id)}
+                                  placeholder="고민을 해결할 수 있는 방법을 작성해주세요."
+                                  className={styles.solutionTextarea}
+                                  rows={1}
+                                  spellCheck={false}
+                                />
+                              </div>
+                              
+                              {/* 해결책 삭제 버튼 - 입력 필드 내부에 위치 */}
+                              {(item.solutionInputs || []).length > 1 && (
+                                <button 
+                                  onClick={() => removeSolutionInput(item.id, solutionInput.id)}
+                                  className={styles.removeSolutionButton}
+                                >
+                                  ×
+                                </button>
+                              )}
+                            </div>
                             
                             {/* 강점 도우미 박스 */}
                             {solutionInput.showStrengthHelper && (
@@ -1805,7 +1850,15 @@ const Writing: React.FC = () => {
                                     <span className={styles.loadingKeywords}>키워드를 생성하고 있습니다...</span>
                                   ) : (
                                     strengthKeywords.map((keyword, index) => (
-                                      <span key={index} className={styles.strengthKeyword}>
+                                      <span 
+                                        key={index} 
+                                        className={`${styles.strengthKeyword} ${
+                                          (selectedStrengthKeywords[solutionInput.id] || []).includes(keyword) 
+                                            ? styles.strengthKeywordSelected 
+                                            : ''
+                                        }`}
+                                        onClick={() => handleStrengthKeywordSelect(solutionInput.id, keyword)}
+                                      >
                                         {keyword}
                                       </span>
                                     ))
@@ -1847,36 +1900,68 @@ const Writing: React.FC = () => {
 
                       {/* AI 대안 추천 섹션 */}
                       <div className={styles.aiSuggestionsSection}>
-                        <div className={styles.aiSuggestionsHeader}>
-                          <h4 className={styles.aiSuggestionsTitle}>🤖 힌트 얻기</h4>
-                          <button
-                            onClick={() => generateAiSuggestions(item.id)}
-                            disabled={item.isLoadingAiSuggestions}
-                            className={styles.generateSuggestionsButton}
-                          >
-                            {item.isLoadingAiSuggestions ? '생성 중...' : '추천받기'}
-                          </button>
+                        <p className={styles.aiSuggestionsGuide}>
+                          {characterName}의 강점과 다양한 해결방법을 마법의 솥에 넣고 섞어보세요 🪄<br />클릭해서 선택한 재료들로 새로운 솔루션을 만들어 보자구요 ✨
+                        </p>
+                        
+                        {/* 3열 레이아웃: 강점 - mix.gif - 해결방법 카테고리 */}
+                        <div className={styles.threeColumnLayout}>
+                          {/* 강점 섹션 (왼쪽) */}
+                          <div className={styles.strengthTagsSection}>
+                            <h5 className={styles.strengthTagsTitle}>💪 {characterName}의 강점</h5>
+                            <div className={styles.strengthTagsList}>
+                              {strengthKeywords.map((keyword, index) => (
+                                <span 
+                                  key={index} 
+                                  className={`${styles.strengthKeyword} ${
+                                    selectedStrengthTags.includes(keyword) ? styles.strengthKeywordSelected : ''
+                                  }`}
+                                  onClick={() => handleStrengthTagSelect(keyword)}
+                                >
+                                  {keyword}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                          
+                          {/* Mix GIF (가운데) */}
+                          <div className={styles.mixGifContainer}>
+                            <img src="/images/mix.gif" alt="Mix" className={styles.mixGif} />
+                          </div>
+                          
+                          {/* 해결방법 카테고리 섹션 (오른쪽) */}
+                          <div className={styles.solutionCategoriesSection}>
+                            <h5 className={styles.solutionCategoriesTitle}>💡 해결 방안</h5>
+                            <div className={styles.solutionCategoriesList}>
+                              {['마음 다스리기', '환경 바꿀기', '사람들과 연결하기', '나를 덕하기', '바로 실행하기', '생각 바꿀기'].map((category, index) => (
+                                <span 
+                                  key={index}
+                                  className={`${styles.solutionCategoryTag} ${
+                                    selectedSolutionCategories.includes(category) ? styles.solutionCategoryTagSelected : ''
+                                  }`}
+                                  onClick={() => handleSolutionCategorySelect(category)}
+                                >
+                                  {category}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
                         </div>
                         
-                        {item.isLoadingAiSuggestions ? (
-                          <div className={styles.loadingContainer}>
-                            <p className={styles.loadingText}>AI가 대안을 생성하고 있습니다...</p>
-                          </div>
-                        ) : (
-                          <div className={styles.aiSuggestionsList}>
-                            {(item.aiSuggestions || []).slice(0, 3).map((suggestion, index) => (
-                              <div 
-                                key={index} 
-                                className={styles.aiSuggestionItem}
-                                onClick={() => addAiSuggestionToSolution(item.id, suggestion)}
-                              >
-                                <div className={styles.aiSuggestionText}>
-                                  {suggestion.text}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                        {/* 마법의 믹싱 버튼 */}
+                        <div className={styles.magicMixButtonContainer}>
+                          <button 
+                            className={styles.magicMixButton}
+                            onClick={() => {
+                              // TODO: 마법의 솥 믹싱 로직 추가
+                              console.log('선택된 강점:', selectedStrengthTags);
+                              console.log('선택된 카테고리:', selectedSolutionCategories);
+                            }}
+                            disabled={selectedStrengthTags.length === 0 && selectedSolutionCategories.length === 0}
+                          >
+                            ✨ 선택한 재료들을 섞어 새로운 솔루션 만들기 🪄
+                          </button>
+                        </div>
                       </div>
                       
                     </div>
