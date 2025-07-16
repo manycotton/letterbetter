@@ -74,7 +74,7 @@ interface ReflectionItem {
   isLoadingAiSuggestions?: boolean;
   selectedAiSuggestions?: AiSuggestion[];
   solutionContent?: string;
-  solutionInputs?: { id: string; content: string; showStrengthHelper?: boolean }[];
+  solutionInputs?: { id: string; content: string; showStrengthHelper?: boolean; aiSolutionTags?: { strengthTags: string[]; solutionCategories: string[] } }[];
   solutionCompleted?: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -1004,6 +1004,30 @@ const Writing: React.FC = () => {
     ));
   };
 
+  // AI 솔루션 태그 제거
+  const removeAiSolutionTag = (itemId: string, solutionId: string, tagType: 'strength' | 'solution', tagValue: string) => {
+    setReflectionItems(prev => prev.map(item => 
+      item.id === itemId 
+        ? { 
+            ...item, 
+            solutionInputs: (item.solutionInputs || []).map(input => 
+              input.id === solutionId 
+                ? { 
+                    ...input, 
+                    aiSolutionTags: input.aiSolutionTags ? {
+                      ...input.aiSolutionTags,
+                      [tagType === 'strength' ? 'strengthTags' : 'solutionCategories']: 
+                        input.aiSolutionTags[tagType === 'strength' ? 'strengthTags' : 'solutionCategories']
+                          .filter(tag => tag !== tagValue)
+                    } : undefined
+                  }
+                : input
+            )
+          }
+        : item
+    ));
+  };
+
   // 강점 도우미 토글
   const toggleStrengthHelper = (itemId: string, solutionId: string) => {
     setReflectionItems(prev => prev.map(item => 
@@ -1032,6 +1056,13 @@ const Writing: React.FC = () => {
   
   // 선택된 해결방법 카테고리 상태
   const [selectedSolutionCategories, setSelectedSolutionCategories] = useState<string[]>([]);
+  
+  // AI 솔루션 추천 팝업 상태
+  const [showAiSolutionPopup, setShowAiSolutionPopup] = useState(false);
+  const [aiSolutions, setAiSolutions] = useState<string[]>([]);
+  const [selectedAiSolutions, setSelectedAiSolutions] = useState<string[]>([]);
+  const [isGeneratingAiSolutions, setIsGeneratingAiSolutions] = useState(false);
+  const [currentReflectionItemId, setCurrentReflectionItemId] = useState<string | null>(null);
 
   // 강점 키워드 생성 API 호출
   const generateStrengthKeywords = async () => {
@@ -1152,6 +1183,100 @@ const Writing: React.FC = () => {
       ...prev,
       [solutionId]: (prev[solutionId] || []).filter(k => k !== keyword)
     }));
+  };
+
+  // AI 솔루션 생성 함수
+  const generateAiSolutions = async (reflectionItemId: string) => {
+    if (selectedStrengthTags.length === 0 && selectedSolutionCategories.length === 0) {
+      alert('강점이나 해결방안을 선택해주세요.');
+      return;
+    }
+
+    const currentItem = reflectionItems.find(item => item.id === reflectionItemId);
+    if (!currentItem || !currentItem.content.trim()) {
+      alert('고민 내용이 없습니다.');
+      return;
+    }
+
+    setIsGeneratingAiSolutions(true);
+    setCurrentReflectionItemId(reflectionItemId);
+    
+    try {
+      const response = await fetch('/api/generate-ai-solutions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          problemContent: currentItem.content,
+          letterContent: letterParagraphs.join(' '),
+          characterName,
+          selectedStrengthTags,
+          selectedSolutionCategories,
+          strengthItems,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('AI 솔루션 생성에 실패했습니다.');
+      }
+
+      const data = await response.json();
+      setAiSolutions(data.solutions || []);
+      setShowAiSolutionPopup(true);
+    } catch (error) {
+      console.error('Error generating AI solutions:', error);
+      alert('솔루션 생성 중 오류가 발생했습니다.');
+    } finally {
+      setIsGeneratingAiSolutions(false);
+    }
+  };
+
+  // AI 솔루션 팝업 닫기
+  const closeAiSolutionPopup = () => {
+    setShowAiSolutionPopup(false);
+    setAiSolutions([]);
+    setSelectedAiSolutions([]);
+    setSelectedStrengthTags([]);
+    setSelectedSolutionCategories([]);
+    setCurrentReflectionItemId(null);
+  };
+
+  // AI 솔루션 선택/해제 토글
+  const toggleAiSolution = (solution: string) => {
+    setSelectedAiSolutions(prev => 
+      prev.includes(solution) 
+        ? prev.filter(s => s !== solution)
+        : [...prev, solution]
+    );
+  };
+
+  // 선택된 AI 솔루션들을 입력 필드에 추가
+  const addSelectedAiSolutions = () => {
+    if (!currentReflectionItemId || selectedAiSolutions.length === 0) return;
+    
+    setReflectionItems(prev => prev.map(item => 
+      item.id === currentReflectionItemId 
+        ? { 
+            ...item, 
+            solutionInputs: [
+              ...(item.solutionInputs || []), 
+              ...selectedAiSolutions.map(solution => ({
+                id: Date.now().toString() + Math.random(),
+                content: solution,
+                showStrengthHelper: false,
+                aiSolutionTags: {
+                  strengthTags: selectedStrengthTags,
+                  solutionCategories: selectedSolutionCategories
+                }
+              }))
+            ] 
+          }
+        : item
+    ));
+    
+    // 팝업 닫기 및 상태 초기화
+    closeAiSolutionPopup();
   };
 
   // Step 3: 개인 경험 반영 핸들러
@@ -1791,10 +1916,44 @@ const Writing: React.FC = () => {
                           <div key={solutionInput.id} className={styles.solutionInputItem} data-solution-id={solutionInput.id}>
                             <div className={styles.solutionInputField}>
                               <div className={styles.inputContent}>
+                                {/* AI 솔루션 강점 태그들 */}
+                                {solutionInput.aiSolutionTags?.strengthTags?.map((tag, index) => (
+                                  <span 
+                                    key={`strength-${index}`} 
+                                    className={styles.strengthChip}
+                                  >
+                                    {tag}
+                                    <button 
+                                      onClick={() => removeAiSolutionTag(item.id, solutionInput.id, 'strength', tag)}
+                                      className={styles.chipRemoveButton}
+                                      type="button"
+                                    >
+                                      ×
+                                    </button>
+                                  </span>
+                                ))}
+                                
+                                {/* AI 솔루션 해결방안 태그들 */}
+                                {solutionInput.aiSolutionTags?.solutionCategories?.map((category, index) => (
+                                  <span 
+                                    key={`solution-${index}`} 
+                                    className={styles.solutionCategoryChip}
+                                  >
+                                    {category}
+                                    <button 
+                                      onClick={() => removeAiSolutionTag(item.id, solutionInput.id, 'solution', category)}
+                                      className={styles.solutionCategoryChipRemoveButton}
+                                      type="button"
+                                    >
+                                      ×
+                                    </button>
+                                  </span>
+                                ))}
+                                
                                 {/* 선택된 강점 키워드 칩들 */}
                                 {(selectedStrengthKeywords[solutionInput.id] || []).map((keyword, index) => (
                                   <span 
-                                    key={index} 
+                                    key={`keyword-${index}`} 
                                     className={styles.strengthChip}
                                   >
                                     {keyword}
@@ -1901,14 +2060,14 @@ const Writing: React.FC = () => {
                       {/* AI 대안 추천 섹션 */}
                       <div className={styles.aiSuggestionsSection}>
                         <p className={styles.aiSuggestionsGuide}>
-                          {characterName}의 강점과 다양한 해결방법을 마법의 솥에 넣고 섞어보세요 🪄<br />클릭해서 선택한 재료들로 새로운 솔루션을 만들어 보자구요 ✨
+                          {characterName}의 강점과 다양한 해결 방법을 마법의 솥에 넣고 섞어보세요 🪄<br />클릭해서 선택한 재료들로 새로운 솔루션을 만들어 보자구요 ✨
                         </p>
                         
                         {/* 3열 레이아웃: 강점 - mix.gif - 해결방법 카테고리 */}
                         <div className={styles.threeColumnLayout}>
                           {/* 강점 섹션 (왼쪽) */}
                           <div className={styles.strengthTagsSection}>
-                            <h5 className={styles.strengthTagsTitle}>💪 {characterName}의 강점</h5>
+                            <h5 className={styles.strengthTagsTitle}>{characterName}의 강점</h5>
                             <div className={styles.strengthTagsList}>
                               {strengthKeywords.map((keyword, index) => (
                                 <span 
@@ -1931,9 +2090,9 @@ const Writing: React.FC = () => {
                           
                           {/* 해결방법 카테고리 섹션 (오른쪽) */}
                           <div className={styles.solutionCategoriesSection}>
-                            <h5 className={styles.solutionCategoriesTitle}>💡 해결 방안</h5>
+                            <h5 className={styles.solutionCategoriesTitle}>해결 방안</h5>
                             <div className={styles.solutionCategoriesList}>
-                              {['마음 다스리기', '환경 바꿀기', '사람들과 연결하기', '나를 덕하기', '바로 실행하기', '생각 바꿀기'].map((category, index) => (
+                              {['마음 챙기기', '주변 환경 바꾸기', '도움 요청하기', '좋은 관계 만들기', '나답게 행동/말하기', '작지만 확실한 실천', '생각 뒤집기'].map((category, index) => (
                                 <span 
                                   key={index}
                                   className={`${styles.solutionCategoryTag} ${
@@ -1952,14 +2111,10 @@ const Writing: React.FC = () => {
                         <div className={styles.magicMixButtonContainer}>
                           <button 
                             className={styles.magicMixButton}
-                            onClick={() => {
-                              // TODO: 마법의 솥 믹싱 로직 추가
-                              console.log('선택된 강점:', selectedStrengthTags);
-                              console.log('선택된 카테고리:', selectedSolutionCategories);
-                            }}
-                            disabled={selectedStrengthTags.length === 0 && selectedSolutionCategories.length === 0}
+                            onClick={() => generateAiSolutions(item.id)}
+                            disabled={selectedStrengthTags.length === 0 && selectedSolutionCategories.length === 0 || isGeneratingAiSolutions}
                           >
-                            ✨ 선택한 재료들을 섞어 새로운 솔루션 만들기 🪄
+                            {isGeneratingAiSolutions ? '🪄 마법의 솥이 끓고 있어요...' : '✨ 재료 섞어 새로운 솔루션 만들기 🪄'}
                           </button>
                         </div>
                       </div>
@@ -1985,6 +2140,74 @@ const Writing: React.FC = () => {
           )}
         </div>
       </div>
+      
+      {/* AI 솔루션 추천 팝업 */}
+      {showAiSolutionPopup && (
+        <div className={styles.aiSolutionPopupOverlay}>
+          <div className={styles.aiSolutionPopup}>
+            <div className={styles.aiSolutionPopupHeader}>
+              <h3 className={styles.aiSolutionPopupTitle}>📜 {characterName}을 위한 지혜의 조언 📜</h3>
+              <button 
+                className={styles.aiSolutionPopupClose}
+                onClick={closeAiSolutionPopup}
+              >
+                ×
+              </button>
+            </div>
+            
+            <div className={styles.aiSolutionPopupContent}>
+              {/* 선택된 재료들 표시 */}
+              <div className={styles.selectedIngredientsSection}>
+                <div className={styles.selectedIngredients}>
+                  {selectedStrengthTags.map((tag, index) => (
+                    <div key={`strength-${index}`} className={styles.selectedItemCard}>
+                      💪 {tag}
+                    </div>
+                  ))}
+                  {selectedSolutionCategories.map((category, index) => (
+                    <div key={`solution-${index}`} className={styles.selectedItemCard}>
+                      💡 {category}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              {/* AI 솔루션들 */}
+              <div className={styles.aiSolutionsContainer}>
+                <button 
+                  className={styles.regenerateAiSolutionsButton}
+                  onClick={() => currentReflectionItemId && generateAiSolutions(currentReflectionItemId)}
+                  disabled={isGeneratingAiSolutions}
+                >
+                  {isGeneratingAiSolutions ? '조언 생성 중...' : '🔄 다른 조언 보기'}
+                </button>
+                
+                <div className={styles.aiSolutionsList}>
+                  {aiSolutions.map((solution, index) => (
+                    <div 
+                      key={index} 
+                      className={`${styles.aiSolutionCard} ${
+                        selectedAiSolutions.includes(solution) ? styles.aiSolutionCardSelected : ''
+                      }`}
+                      onClick={() => toggleAiSolution(solution)}
+                    >
+                      <div className={styles.aiSolutionText}>{solution}</div>
+                    </div>
+                  ))}
+                </div>
+                
+                <button 
+                  className={styles.selectSolutionsButton}
+                  onClick={addSelectedAiSolutions}
+                  disabled={selectedAiSolutions.length === 0}
+                >
+                  선택하기
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
