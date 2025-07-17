@@ -2,18 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import styles from '../styles/Writing.module.css';
 
-interface Question {
-  id: string;
-  text: string;
-  isSelected: boolean;
-  userAnswer?: string;
-}
-
-interface QAPair {
-  id: string;
-  question: string;
-  answer: string;
-}
 
 interface HighlightedItem {
   id: string;
@@ -21,12 +9,6 @@ interface HighlightedItem {
   color: string;
   originalText: string;
   paragraphIndex: number;
-  questions?: Question[];
-  isLoadingQuestions?: boolean;
-  selectedQuestion?: Question;
-  userAnswer?: string;
-  conversationHistory?: QAPair[];
-  editingQAId?: string;
   problemReason?: string; // 왜 고민이라고 생각했는지
   userExplanation?: string;
   emotionInference?: string;
@@ -286,6 +268,36 @@ const Writing: React.FC = () => {
     return () => clearTimeout(timeoutId);
   }, [reflectionItems]);
 
+  // 모든 solution input 텍스트 영역 높이 자동 조절
+  useEffect(() => {
+    const adjustAllSolutionTextareas = () => {
+      reflectionItems.forEach(item => {
+        if (item.solutionInputs) {
+          item.solutionInputs.forEach(solutionInput => {
+            const textarea = document.querySelector(`textarea[data-solution-id="${solutionInput.id}"]`) as HTMLTextAreaElement;
+            if (textarea) {
+              textarea.style.height = 'auto';
+              const baseHeight = 47; // 기본 한 줄 높이
+              const scrollHeight = textarea.scrollHeight;
+              
+              // 내용이 있을 때만 스크롤 높이 확인, 없으면 기본 높이
+              if (solutionInput.content && scrollHeight > baseHeight) {
+                textarea.style.height = scrollHeight + 'px';
+              } else {
+                textarea.style.height = baseHeight + 'px';
+              }
+            }
+          });
+        }
+      });
+    };
+
+    // 컴포넌트 마운트 후 약간의 딜레이를 두고 실행
+    const timeoutId = setTimeout(adjustAllSolutionTextareas, 150);
+    
+    return () => clearTimeout(timeoutId);
+  }, [reflectionItems]);
+
   // 하이라이트 복원 함수 - 이해하기와 강점찾기 모두 처리
   const restoreHighlights = (highlightItems: any[], strengthItems: any[] = []) => {
     setLetterContent(prev => {
@@ -472,7 +484,6 @@ const Writing: React.FC = () => {
               // 강점찾기 완료 후 -> 하이라이트 기능 중지 (아무것도 하지 않음)
             }
             
-            // 질문 자동 생성 제거 - 사용자가 버튼을 눌러야 생성됨
             
             // 선택 해제
             selection.removeAllRanges();
@@ -497,96 +508,38 @@ const Writing: React.FC = () => {
     setStrengthItems(prev => prev.filter(item => item.id !== id));
   };
 
-  const generateQuestions = async (itemId: string, additionalInput?: string, itemText?: string) => {
-    console.log('generateQuestions called with itemId:', itemId, 'additionalInput:', additionalInput, 'itemText:', itemText);
-    
-    setHighlightedItems(prev => prev.map(item => 
-      item.id === itemId 
-        ? { ...item, isLoadingQuestions: true }
-        : item
-    ));
-    
-    try {
-      let item;
-      let textToUse;
-      
-      if (itemText) {
-        textToUse = itemText;
-      } else {
-        item = highlightedItems.find(item => item.id === itemId);
-        console.log('Found item:', item);
-        if (!item) {
-          console.error('Item not found for itemId:', itemId);
-          return;
-        }
-        textToUse = item.text;
-      }
-      
-      console.log('Making API call with:', { highlightedTexts: [textToUse], userInput: additionalInput });
-      
-      const response = await fetch('/api/generate-questions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          highlightedTexts: [textToUse],
-          userInput: additionalInput,
-        }),
-      });
-
-      console.log('API response status:', response.status);
-
-      if (!response.ok) {
-        throw new Error('Failed to generate questions');
-      }
-
-      const data = await response.json();
-      console.log('API response data:', data);
-      
-      const newQuestions: Question[] = data.questions.map((questionText: string, index: number) => ({
-        id: `question-${Date.now()}-${index}`,
-        text: questionText,
-        isSelected: false,
-      }));
-
-      console.log('Generated questions:', newQuestions);
-
-      setHighlightedItems(prev => prev.map(item => 
-        item.id === itemId 
-          ? { ...item, questions: newQuestions, isLoadingQuestions: false, selectedQuestion: undefined, userAnswer: '' }
-          : item
-      ));
-    } catch (error) {
-      console.error('Error generating questions:', error);
-      setHighlightedItems(prev => prev.map(item => 
-        item.id === itemId 
-          ? { ...item, isLoadingQuestions: false }
-          : item
-      ));
-    }
-  };
-
-  const selectQuestion = (itemId: string, question: Question) => {
-    // 질문 선택 시 즉시 history에 추가
-    const newQAPair: QAPair = {
-      id: `qa-${Date.now()}`,
-      question: question.text,
-      answer: ''
-    };
-    
-    setHighlightedItems(prev => prev.map(item => 
-      item.id === itemId 
-        ? { 
-            ...item, 
-            conversationHistory: [...(item.conversationHistory || []), newQAPair],
-            selectedQuestion: undefined,
-            userAnswer: '',
-            questions: undefined
+  // currentStep이 3으로 변경될 때 모든 reflection input 크기 조정
+  useEffect(() => {
+    if (currentStep === 3) {
+      setTimeout(() => {
+        reflectionItems.forEach(item => {
+          const textarea = document.querySelector(`[data-item-id="${item.id}"]`) as HTMLTextAreaElement;
+          if (textarea && item.content) {
+            adjustTextareaHeight(textarea);
           }
-        : item
-    ));
-  };
+        });
+      }, 100);
+    }
+  }, [currentStep, reflectionItems]);
+
+  // currentStep이 4로 변경될 때 모든 solution textarea 크기 조정
+  useEffect(() => {
+    if (currentStep === 4) {
+      setTimeout(() => {
+        reflectionItems.forEach(item => {
+          if (item.solutionInputs) {
+            item.solutionInputs.forEach(solutionInput => {
+              const textarea = document.querySelector(`[data-solution-id="${solutionInput.id}"]`) as HTMLTextAreaElement;
+              if (textarea && solutionInput.content) {
+                textarea.style.height = 'auto';
+                textarea.style.height = Math.max(20, textarea.scrollHeight) + 'px';
+              }
+            });
+          }
+        });
+      }, 100);
+    }
+  }, [currentStep, reflectionItems]);
 
   // Reflection item 관리 함수들
   const addReflectionItem = (initialHint?: string) => {
@@ -961,12 +914,11 @@ const Writing: React.FC = () => {
     const value = e.target.value;
     const textarea = e.target;
     
-    // 높이 자동 조절 - 최소 높이를 24px로 고정
-    textarea.style.height = '24px';
-    textarea.style.maxHeight = 'none';
-    if (textarea.scrollHeight > 24) {
-      textarea.style.height = textarea.scrollHeight + 'px';
-    }
+    // 높이 자동 조절 - 내용에 따라 동적으로 조정
+    textarea.style.height = 'auto';
+    const newHeight = Math.max(20, textarea.scrollHeight);
+    textarea.style.height = newHeight + 'px';
+    console.log('Textarea height adjusted:', newHeight, 'scrollHeight:', textarea.scrollHeight);
     
     setReflectionItems(prev => prev.map(item => 
       item.id === itemId 
@@ -1296,8 +1248,6 @@ const Writing: React.FC = () => {
     ));
   };
 
-  // Step 3: AI 대안 추천 생성 함수 (제거됨)
-  // const generateAiSuggestions = async (itemId: string) => { ... };
 
   // Step 3: 선택된 AI 제안 제거
   const removeSelectedAiSuggestion = (itemId: string, suggestionToRemove: AiSuggestion) => {
@@ -1322,11 +1272,91 @@ const Writing: React.FC = () => {
     }
   };
 
-  // Step 3: AI 제안 키워드를 해결책에 추가 (제거됨)
-  // const addAiSuggestionToSolution = (itemId: string, suggestion: AiSuggestion) => { ... };
+  // 답장 생성 함수
+  const generateResponseLetter = async () => {
+    try {
+      // 사용자 정보 수집 (question module 1번에서 받은 정보)
+      let userIntroduction = '';
+      try {
+        const savedAnswers = localStorage.getItem('questionAnswers');
+        if (savedAnswers) {
+          const answers = JSON.parse(savedAnswers);
+          // 첫 번째 질문의 답변을 자기소개로 사용
+          userIntroduction = answers['1'] || '';
+        }
+      } catch (error) {
+        console.warn('사용자 소개 정보를 가져올 수 없습니다:', error);
+      }
 
+      // 원본 편지 내용 수집
+      const originalLetter = generatedLetter?.content || letterParagraphs.join('\n');
 
+      // 고민과 해결책 데이터 정리
+      const validReflectionItems = reflectionItems.filter(item => 
+        item.content.trim().length > 0 && 
+        item.solutionInputs && 
+        item.solutionInputs.some(solution => solution.content.trim().length > 0)
+      );
 
+      if (validReflectionItems.length === 0) {
+        alert('고민 정리하기와 해결책 탐색하기를 먼저 완료해주세요.');
+        return;
+      }
+
+      // 로딩 상태 표시
+      const button = document.querySelector(`.${styles.completeSolutionButton}`) as HTMLButtonElement;
+      if (button) {
+        button.disabled = true;
+        button.textContent = '💌 답장을 작성하고 있어요...';
+      }
+
+      // API 호출
+      const response = await fetch('/api/generate-response-letter', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userNickname: currentUser?.nickname || '익명의 사용자',
+          characterName,
+          originalLetter,
+          userIntroduction,
+          reflectionItems: validReflectionItems,
+          strengthItems
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('답장 생성에 실패했습니다.');
+      }
+
+      const result = await response.json();
+
+      // 생성된 답장을 sessionStorage에 저장
+      const responseLetterData = {
+        letter: result.letter,
+        userNickname: currentUser?.nickname || '익명의 사용자',
+        characterName,
+        generatedAt: new Date().toISOString()
+      };
+
+      sessionStorage.setItem('responseLetterData', JSON.stringify(responseLetterData));
+
+      // 응답 편지 페이지로 이동
+      router.push('/responseletter');
+
+    } catch (error) {
+      console.error('Error generating response letter:', error);
+      alert('답장 생성 중 오류가 발생했습니다. 다시 시도해주세요.');
+      
+      // 버튼 상태 복구
+      const button = document.querySelector(`.${styles.completeSolutionButton}`) as HTMLButtonElement;
+      if (button) {
+        button.disabled = false;
+        button.textContent = `✅ 완료했어. 이제 ${characterName}에게 답장을 써볼래 💌`;
+      }
+    }
+  };
 
   return (
     <div className={styles.container}>
@@ -1469,7 +1499,6 @@ const Writing: React.FC = () => {
                       </div>
                     </div>
                     
-                    {/* 이전 대화 히스토리와 질문 관련 기능은 주석처리됨 */}
                   </div>
                 ))}
               </div>
@@ -1915,66 +1944,81 @@ const Writing: React.FC = () => {
                         {(item.solutionInputs || []).map((solutionInput) => (
                           <div key={solutionInput.id} className={styles.solutionInputItem} data-solution-id={solutionInput.id}>
                             <div className={styles.solutionInputField}>
-                              <div className={styles.inputContent}>
-                                {/* AI 솔루션 강점 태그들 */}
-                                {solutionInput.aiSolutionTags?.strengthTags?.map((tag, index) => (
-                                  <span 
-                                    key={`strength-${index}`} 
-                                    className={styles.strengthChip}
-                                  >
-                                    {tag}
-                                    <button 
-                                      onClick={() => removeAiSolutionTag(item.id, solutionInput.id, 'strength', tag)}
-                                      className={styles.chipRemoveButton}
-                                      type="button"
+                              <div className={`${styles.inputContent} ${
+                                // 태그가 있는지 확인하여 withTags 클래스 추가
+                                (solutionInput.aiSolutionTags?.strengthTags?.length ||
+                                 solutionInput.aiSolutionTags?.solutionCategories?.length ||
+                                 (selectedStrengthKeywords[solutionInput.id] || []).length) > 0
+                                  ? styles.withTags : ''
+                              }`}>
+                                {/* 칩들 컨테이너 - 윗줄 */}
+                                <div className={styles.chipsContainer}>
+                                  {/* AI 솔루션 강점 태그들 */}
+                                  {solutionInput.aiSolutionTags?.strengthTags?.map((tag, index) => (
+                                    <span 
+                                      key={`strength-${index}`} 
+                                      className={styles.strengthChip}
                                     >
-                                      ×
-                                    </button>
-                                  </span>
-                                ))}
-                                
-                                {/* AI 솔루션 해결방안 태그들 */}
-                                {solutionInput.aiSolutionTags?.solutionCategories?.map((category, index) => (
-                                  <span 
-                                    key={`solution-${index}`} 
-                                    className={styles.solutionCategoryChip}
-                                  >
-                                    {category}
-                                    <button 
-                                      onClick={() => removeAiSolutionTag(item.id, solutionInput.id, 'solution', category)}
-                                      className={styles.solutionCategoryChipRemoveButton}
-                                      type="button"
+                                      {tag}
+                                      <button 
+                                        onClick={() => removeAiSolutionTag(item.id, solutionInput.id, 'strength', tag)}
+                                        className={styles.chipRemoveButton}
+                                        type="button"
+                                      >
+                                        ×
+                                      </button>
+                                    </span>
+                                  ))}
+                                  
+                                  {/* AI 솔루션 해결방안 태그들 */}
+                                  {solutionInput.aiSolutionTags?.solutionCategories?.map((category, index) => (
+                                    <span 
+                                      key={`solution-${index}`} 
+                                      className={styles.solutionCategoryChip}
                                     >
-                                      ×
-                                    </button>
-                                  </span>
-                                ))}
-                                
-                                {/* 선택된 강점 키워드 칩들 */}
-                                {(selectedStrengthKeywords[solutionInput.id] || []).map((keyword, index) => (
-                                  <span 
-                                    key={`keyword-${index}`} 
-                                    className={styles.strengthChip}
-                                  >
-                                    {keyword}
-                                    <button 
-                                      onClick={() => removeSelectedStrengthKeyword(solutionInput.id, keyword)}
-                                      className={styles.chipRemoveButton}
-                                      type="button"
+                                      {category}
+                                      <button 
+                                        onClick={() => removeAiSolutionTag(item.id, solutionInput.id, 'solution', category)}
+                                        className={styles.solutionCategoryChipRemoveButton}
+                                        type="button"
+                                      >
+                                        ×
+                                      </button>
+                                    </span>
+                                  ))}
+                                  
+                                  {/* 선택된 강점 키워드 칩들 */}
+                                  {(selectedStrengthKeywords[solutionInput.id] || []).map((keyword, index) => (
+                                    <span 
+                                      key={`keyword-${index}`} 
+                                      className={styles.strengthChip}
                                     >
-                                      ×
-                                    </button>
-                                  </span>
-                                ))}
+                                      {keyword}
+                                      <button 
+                                        onClick={() => removeSelectedStrengthKeyword(solutionInput.id, keyword)}
+                                        className={styles.chipRemoveButton}
+                                        type="button"
+                                      >
+                                        ×
+                                      </button>
+                                    </span>
+                                  ))}
+                                </div>
                                 
+                                {/* 텍스트 입력 영역 - 아랫줄 */}
                                 <textarea
                                   value={solutionInput.content}
                                   onChange={(e) => handleSolutionInput(e, item.id, solutionInput.id)}
-                                  onFocus={() => !solutionInput.showStrengthHelper && toggleStrengthHelper(item.id, solutionInput.id)}
+                                  onFocus={() => {
+                                    // 강점 도우미 토글만 수행
+                                    if (!solutionInput.showStrengthHelper) {
+                                      toggleStrengthHelper(item.id, solutionInput.id);
+                                    }
+                                  }}
                                   placeholder="고민을 해결할 수 있는 방법을 작성해주세요."
                                   className={styles.solutionTextarea}
-                                  rows={1}
                                   spellCheck={false}
+                                  data-solution-id={solutionInput.id}
                                 />
                               </div>
                               
@@ -2132,6 +2176,18 @@ const Writing: React.FC = () => {
                       className={styles.goToStep2Button}
                     >
                       3단계로 이동
+                    </button>
+                  </div>
+                )}
+                
+                {/* 최종 완료 버튼 */}
+                {reflectionItems.filter(item => item.content.trim().length > 0).length > 0 && (
+                  <div className={styles.solutionComplete}>
+                    <button 
+                      className={styles.completeSolutionButton}
+                      onClick={generateResponseLetter}
+                    >
+                      ✅ 완료했어. 이제 {characterName}에게 답장을 써볼래 💌
                     </button>
                   </div>
                 )}
