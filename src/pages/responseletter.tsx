@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import styles from '../styles/ResponseLetter.module.css';
+import { saveLetterContentData, saveResponseLetterData, getResponseLetterData } from '../../lib/database';
 
 interface ResponseLetterData {
   letter: string;
@@ -44,12 +45,37 @@ export default function ResponseLetter() {
     });
   };
 
-  const handleSendLetter = () => {
+  const handleSendLetter = async () => {
     // 편지 완료 페이지로 이동하기 위한 데이터 저장
     const completeData = {
       characterName: letterData?.characterName || '뚜뚜',
       userNickname: letterData?.userNickname || '사용자'
     };
+    
+    // Save letter content to database
+    try {
+      const sessionId = sessionStorage.getItem('currentSessionId');
+      const strengthKeywords = JSON.parse(sessionStorage.getItem('strengthKeywords') || '[]');
+      
+      if (sessionId && letterData) {
+        await saveLetterContentData(sessionId, letterData.letter, strengthKeywords);
+        
+        // Update response letter data with final edited version
+        const originalResponseData = await getResponseLetterData(sessionId);
+        if (originalResponseData) {
+          await saveResponseLetterData(
+            sessionId,
+            originalResponseData.originalGeneratedLetter,
+            letterData.letter, // final edited version
+            letterData.characterName,
+            letterData.userNickname,
+            originalResponseData.generatedAt
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Error saving letter content:', error);
+    }
     
     sessionStorage.setItem('letterCompleteData', JSON.stringify(completeData));
     router.push('/lettercomplete');

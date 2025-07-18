@@ -128,3 +128,131 @@ export interface ReflectionHints {
   createdAt: string;
   updatedAt: string;
 }
+
+// New interfaces for comprehensive logging
+export interface WritingStepData {
+  id: string;
+  sessionId: string;
+  stepType: 'understanding' | 'strength_finding';
+  highlightedItems: HighlightedItem[];
+  userAnswers: {
+    itemId: string;
+    answer: string;
+  }[];
+  completedAt: string;
+  createdAt: string;
+}
+
+export interface ReflectionStepData {
+  id: string;
+  sessionId: string;
+  reflectionItems: ReflectionItem[];
+  selectedHintTags: Array<{
+    reflectionId: string;
+    tags: string[];
+  }>;
+  allGeneratedHints: string[];
+  completedAt: string;
+  createdAt: string;
+}
+
+export interface InspectionData {
+  id: string;
+  sessionId: string;
+  inspectionResults: {
+    reflectionId: string;
+    emotionCheck: EmotionCheckResult;
+    blameCheck: BlameCheckResult;
+  }[];
+  completedAt: string;
+  createdAt: string;
+}
+
+export interface SuggestionData {
+  id: string;
+  sessionId: string;
+  suggestionResults: {
+    reflectionId: string;
+    warningText?: string;
+    environmentalFactors: string[];
+  }[];
+  allGeneratedFactors: string[];
+  completedAt: string;
+  createdAt: string;
+}
+
+export interface LetterContentData {
+  id: string;
+  sessionId: string;
+  letterContent: string;
+  strengthKeywords: string[];
+  completedAt: string;
+  createdAt: string;
+}
+
+// New interfaces for additional logging requirements
+export interface SolutionExplorationData {
+  id: string;
+  sessionId: string;
+  solutionsByReflection: {
+    reflectionId: string;
+    userSolutions: {
+      solutionId: string;
+      content: string;
+      isAiGenerated: boolean;
+      selectedTags?: string[];
+      strengthTags?: string[];
+      solutionCategories?: string[];
+      originalAiSolution?: string;
+      isModified: boolean;
+      createdAt: string;
+      updatedAt?: string;
+    }[];
+  }[];
+  completedAt: string;
+  createdAt: string;
+}
+
+export interface AIStrengthTagsData {
+  id: string;
+  sessionId: string;
+  strengthTagsByReflection: {
+    reflectionId: string;
+    aiStrengthTags: string[];
+    generatedAt: string;
+  }[];
+  createdAt: string;
+}
+
+export interface MagicMixInteractionData {
+  id: string;
+  sessionId: string;
+  interactions: {
+    interactionId: string;
+    reflectionId: string;
+    selectedStrengthTags: string[];
+    selectedSolutionCategories: string[];
+    generatedSolutions: string[];
+    selectedSolutionIndex?: number;
+    addedToSolutionField: boolean;
+    solutionFieldId?: string;
+    finalModifiedContent?: string;
+    timestamp: string;
+  }[];
+  totalMixCount: number;
+  totalSolutionsAdded: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ResponseLetterData {
+  id: string;
+  sessionId: string;
+  originalGeneratedLetter: string;
+  finalEditedLetter: string;
+  characterName: string;
+  userNickname: string;
+  generatedAt: string;
+  finalizedAt: string;
+  createdAt: string;
+}

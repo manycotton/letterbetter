@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { saveQuestionAnswers, updateQuestionAnswers, getQuestionAnswers } from '../../../../lib/database';
+import { saveQuestionAnswers, updateQuestionAnswers, getQuestionAnswers, saveQuestionAnswersWithStrengthData } from '../../../../lib/database';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -20,7 +20,40 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       questionAnswers = await getQuestionAnswers(answersId);
     } else {
       // 새 답변 저장
-      questionAnswers = await saveQuestionAnswers(userId, answers);
+      // Extract strength data from question 2 (index 1)
+      let strengthData = null;
+      if (answers.length > 1 && answers[1]) {
+        const question2Answer = answers[1];
+        // Parse strength tags format: [tag_name] content
+        const strengthTagMatches = question2Answer.match(/\[([^\]]+)\]\s*([^[]*)/g);
+        if (strengthTagMatches) {
+          const parsedStrengths = strengthTagMatches.map((match: string) => {
+            const tagMatch = match.match(/\[([^\]]+)\]\s*(.*)/);
+            if (tagMatch) {
+              return {
+                tag: tagMatch[1].trim(),
+                content: tagMatch[2].trim()
+              };
+            }
+            return null;
+          }).filter(Boolean);
+          
+          if (parsedStrengths.length > 0) {
+            strengthData = {
+              strengthTags: parsedStrengths,
+              rawAnswer: question2Answer,
+              extractedAt: new Date().toISOString()
+            };
+          }
+        }
+      }
+      
+      // Use enhanced function if strength data exists, otherwise use regular function
+      if (strengthData) {
+        questionAnswers = await saveQuestionAnswersWithStrengthData(userId, answers, strengthData);
+      } else {
+        questionAnswers = await saveQuestionAnswers(userId, answers);
+      }
     }
 
     res.status(200).json({ 

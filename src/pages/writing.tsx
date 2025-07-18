@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import styles from '../styles/Writing.module.css';
+import { saveWritingStepData, saveInspectionData, saveSuggestionData, saveReflectionStepData, saveSolutionExplorationData, saveAIStrengthTagsData, saveMagicMixInteractionData, updateMagicMixInteractionData, saveResponseLetterData } from '../../lib/database';
 
 
 interface HighlightedItem {
@@ -94,6 +95,11 @@ const Writing: React.FC = () => {
   
   // 생성된 편지 데이터
   const [generatedLetter, setGeneratedLetter] = useState<any>(null);
+  
+  // Analytics tracking states
+  const [magicMixInteractions, setMagicMixInteractions] = useState<any[]>([]);
+  const [totalMixCount, setTotalMixCount] = useState(0);
+  const [totalSolutionsAdded, setTotalSolutionsAdded] = useState(0);
   
   const highlightColors = ['#03ff00']; // 1단계: 이해하기용
   const strengthColor = '#00cdff'; // 2단계: 강점찾기용
@@ -268,7 +274,8 @@ const Writing: React.FC = () => {
     return () => clearTimeout(timeoutId);
   }, [reflectionItems]);
 
-  // 모든 solution input 텍스트 영역 높이 자동 조절
+  // 모든 solution input 텍스트 영역 높이 자동 조절 - DISABLED (충돌 방지)
+  /*
   useEffect(() => {
     const adjustAllSolutionTextareas = () => {
       reflectionItems.forEach(item => {
@@ -277,7 +284,7 @@ const Writing: React.FC = () => {
             const textarea = document.querySelector(`textarea[data-solution-id="${solutionInput.id}"]`) as HTMLTextAreaElement;
             if (textarea) {
               textarea.style.height = 'auto';
-              const baseHeight = 47; // 기본 한 줄 높이
+              const baseHeight = 20; // 기본 한 줄 높이
               const scrollHeight = textarea.scrollHeight;
               
               // 내용이 있을 때만 스크롤 높이 확인, 없으면 기본 높이
@@ -297,10 +304,50 @@ const Writing: React.FC = () => {
     
     return () => clearTimeout(timeoutId);
   }, [reflectionItems]);
+  */
+
+  // Step completion handlers
+  const handleUnderstandingComplete = async () => {
+    setIsUnderstandingCompleted(true);
+    
+    // Save understanding step data to database
+    try {
+      if (sessionId) {
+        const userAnswers = highlightedItems.map(item => ({
+          itemId: item.id,
+          answer: item.userExplanation || item.problemReason || '',
+          timestamp: new Date().toISOString()
+        }));
+        
+        await saveWritingStepData(sessionId, 'understanding', highlightedItems, userAnswers);
+      }
+    } catch (error) {
+      console.error('Error saving understanding step data:', error);
+    }
+  };
+
+  const handleStrengthComplete = async () => {
+    setIsStrengthCompleted(true);
+    
+    // Save strength finding step data to database
+    try {
+      if (sessionId) {
+        const userAnswers = strengthItems.map(item => ({
+          itemId: item.id,
+          answer: item.strengthDescription || item.strengthApplication || '',
+          timestamp: new Date().toISOString()
+        }));
+        
+        await saveWritingStepData(sessionId, 'strength_finding', strengthItems, userAnswers);
+      }
+    } catch (error) {
+      console.error('Error saving strength finding step data:', error);
+    }
+  };
 
   // 하이라이트 복원 함수 - 이해하기와 강점찾기 모두 처리
   const restoreHighlights = (highlightItems: any[], strengthItems: any[] = []) => {
-    setLetterContent(prev => {
+    setLetterContent(() => {
       const newContent = [...letterParagraphs];
       
       // 각 문단별로 하이라이트 적용
@@ -398,7 +445,7 @@ const Writing: React.FC = () => {
 
   // 모든 하이라이트를 편지 본문에 표시 (이해하기 + 강점찾기)
   const updateLetterHighlights = () => {
-    setLetterContent(prev => {
+    setLetterContent(() => {
       const newContent = [...letterParagraphs];
       
       // 각 문단별로 하이라이트 적용
@@ -522,7 +569,8 @@ const Writing: React.FC = () => {
     }
   }, [currentStep, reflectionItems]);
 
-  // currentStep이 4로 변경될 때 모든 solution textarea 크기 조정
+  // currentStep이 4로 변경될 때 모든 solution textarea 크기 조정 - DISABLED (충돌 방지)
+  /*
   useEffect(() => {
     if (currentStep === 4) {
       setTimeout(() => {
@@ -540,6 +588,7 @@ const Writing: React.FC = () => {
       }, 100);
     }
   }, [currentStep, reflectionItems]);
+  */
 
   // Reflection item 관리 함수들
   const addReflectionItem = (initialHint?: string) => {
@@ -758,6 +807,20 @@ const Writing: React.FC = () => {
           : item
       ));
 
+      // Save inspection data to database
+      try {
+        if (sessionId) {
+          const inspectionResults = [{
+            reflectionId: itemId,
+            emotionCheck: emotionResult,
+            blameCheck: blameResult
+          }];
+          await saveInspectionData(sessionId, inspectionResults);
+        }
+      } catch (error) {
+        console.error('Error saving inspection data:', error);
+      }
+
     } catch (error) {
       console.error('Error processing reflection:', error);
       setReflectionItems(prev => prev.map(item => 
@@ -914,11 +977,62 @@ const Writing: React.FC = () => {
     const value = e.target.value;
     const textarea = e.target;
     
-    // 높이 자동 조절 - 내용에 따라 동적으로 조정
-    textarea.style.height = 'auto';
-    const newHeight = Math.max(20, textarea.scrollHeight);
-    textarea.style.height = newHeight + 'px';
-    console.log('Textarea height adjusted:', newHeight, 'scrollHeight:', textarea.scrollHeight);
+    // 강점 도우미가 열려있는지 확인
+    const helperElement = document.querySelector(`[data-solution-id="${solutionId}"] .${styles.strengthHelper}`);
+    const isHelperVisible = helperElement ? getComputedStyle(helperElement).display !== 'none' : false;
+    
+    // 강점 도우미가 있을 때는 임시로 숨기고 높이 계산
+    if (helperElement && isHelperVisible) {
+      (helperElement as HTMLElement).style.display = 'none';
+    }
+    
+    // 모든 CSS 제약 제거하고 순수 높이 측정
+    textarea.style.setProperty('height', 'auto', 'important');
+    textarea.style.setProperty('min-height', '0', 'important');
+    textarea.style.setProperty('max-height', 'none', 'important');
+    textarea.style.setProperty('padding', '0', 'important');
+    textarea.style.setProperty('border', 'none', 'important');
+    textarea.style.setProperty('overflow', 'hidden', 'important');
+    textarea.style.setProperty('line-height', 'normal', 'important');
+    
+    // CSS 복원
+    textarea.style.removeProperty('padding');
+    textarea.style.removeProperty('border');
+    textarea.style.removeProperty('line-height');
+    textarea.style.setProperty('padding', '3px 45px 3px 0px', 'important');
+    textarea.style.setProperty('line-height', '1.4', 'important');
+    
+    const restoredHeight = textarea.scrollHeight;
+    
+    // 강점 도우미 복원
+    if (helperElement && isHelperVisible) {
+      (helperElement as HTMLElement).style.display = '';
+    }
+    
+    // 1줄 높이 계산 (font-size * line-height + padding)
+    // font-size: 15px, line-height: 1.4, padding: 3px top + 3px bottom
+    const oneLineHeight = Math.ceil(15 * 1.4) + 6; // ≈ 27px
+    
+    // 최종 높이 결정
+    let newHeight;
+    if (value.trim().length === 0) {
+      newHeight = oneLineHeight; // 빈 상태일 때는 1줄 높이
+    } else {
+      newHeight = Math.max(oneLineHeight, restoredHeight); // 내용이 있으면 계산된 높이 사용
+    }
+    
+    // 모든 CSS 높이 제약 완전히 제거하고 강제 설정
+    textarea.style.removeProperty('height');
+    textarea.style.removeProperty('min-height');
+    textarea.style.removeProperty('max-height');
+    
+    // 더 강력한 방법으로 높이 설정
+    textarea.style.setProperty('height', newHeight + 'px', 'important');
+    textarea.style.setProperty('min-height', newHeight + 'px', 'important');
+    textarea.style.setProperty('max-height', newHeight + 'px', 'important');
+    
+    // CSS 클래스로 인한 제약도 차단
+    textarea.setAttribute('style', `height: ${newHeight}px !important; min-height: ${newHeight}px !important; max-height: ${newHeight}px !important; padding: 3px 45px 3px 0px !important; line-height: 1.4 !important; overflow: hidden !important;`);
     
     setReflectionItems(prev => prev.map(item => 
       item.id === itemId 
@@ -1153,6 +1267,9 @@ const Writing: React.FC = () => {
     setIsGeneratingAiSolutions(true);
     setCurrentReflectionItemId(reflectionItemId);
     
+    // Track magic mix interaction
+    setTotalMixCount(prev => prev + 1);
+    
     try {
       const response = await fetch('/api/generate-ai-solutions', {
         method: 'POST',
@@ -1176,6 +1293,20 @@ const Writing: React.FC = () => {
       const data = await response.json();
       setAiSolutions(data.solutions || []);
       setShowAiSolutionPopup(true);
+      
+      // Track interaction data
+      const interactionData = {
+        interactionId: Date.now().toString(),
+        reflectionId: reflectionItemId,
+        selectedStrengthTags: [...selectedStrengthTags],
+        selectedSolutionCategories: [...selectedSolutionCategories],
+        generatedSolutions: data.solutions || [],
+        addedToSolutionField: false,
+        timestamp: new Date().toISOString(),
+        createdAt: new Date().toISOString()
+      };
+      
+      setMagicMixInteractions(prev => [...prev, interactionData]);
     } catch (error) {
       console.error('Error generating AI solutions:', error);
       alert('솔루션 생성 중 오류가 발생했습니다.');
@@ -1207,14 +1338,16 @@ const Writing: React.FC = () => {
   const addSelectedAiSolutions = () => {
     if (!currentReflectionItemId || selectedAiSolutions.length === 0) return;
     
+    const solutionIds = selectedAiSolutions.map(() => Date.now().toString() + Math.random());
+    
     setReflectionItems(prev => prev.map(item => 
       item.id === currentReflectionItemId 
         ? { 
             ...item, 
             solutionInputs: [
               ...(item.solutionInputs || []), 
-              ...selectedAiSolutions.map(solution => ({
-                id: Date.now().toString() + Math.random(),
+              ...selectedAiSolutions.map((solution, index) => ({
+                id: solutionIds[index],
                 content: solution,
                 showStrengthHelper: false,
                 aiSolutionTags: {
@@ -1225,6 +1358,21 @@ const Writing: React.FC = () => {
             ] 
           }
         : item
+    ));
+    
+    // Update analytics
+    setTotalSolutionsAdded(prev => prev + selectedAiSolutions.length);
+    
+    // Update interaction tracking
+    setMagicMixInteractions(prev => prev.map(interaction => 
+      interaction.reflectionId === currentReflectionItemId && !interaction.addedToSolutionField
+        ? {
+            ...interaction,
+            addedToSolutionField: true,
+            solutionFieldId: solutionIds[0], // first solution ID
+            selectedSolutionIndex: 0 // or track which solutions were selected
+          }
+        : interaction
     ));
     
     // 팝업 닫기 및 상태 초기화
@@ -1332,6 +1480,105 @@ const Writing: React.FC = () => {
 
       const result = await response.json();
 
+      // Save suggestion data to database
+      try {
+        if (sessionId) {
+          const suggestionResults = validReflectionItems.map(item => ({
+            reflectionId: item.id,
+            warningText: item.blameCheckResult?.warning,
+            environmentalFactors: item.blameCheckResult?.environmentalFactors || []
+          }));
+          
+          // Collect all generated factors from all reflection items
+          const allGeneratedFactors = validReflectionItems.reduce((acc, item) => {
+            if (item.blameCheckResult?.environmentalFactors) {
+              acc.push(...item.blameCheckResult.environmentalFactors);
+            }
+            return acc;
+          }, [] as string[]);
+          
+          await saveSuggestionData(sessionId, suggestionResults, allGeneratedFactors);
+        }
+      } catch (error) {
+        console.error('Error saving suggestion data:', error);
+      }
+
+      // Save reflection step data to database
+      try {
+        if (sessionId) {
+          const selectedHintTags = reflectionItems.map(item => ({
+            reflectionId: item.id,
+            tags: item.selectedHints || []
+          }));
+          
+          // Collect all generated hints from session storage or other sources
+          const allGeneratedHints = JSON.parse(sessionStorage.getItem('generatedHints') || '[]');
+          
+          // Filter and format reflection items for database
+          const formattedReflectionItems = validReflectionItems.map(item => ({
+            ...item,
+            createdAt: item.createdAt || new Date().toISOString(),
+            updatedAt: item.updatedAt || new Date().toISOString()
+          }));
+          
+          await saveReflectionStepData(sessionId, formattedReflectionItems, selectedHintTags, allGeneratedHints);
+        }
+      } catch (error) {
+        console.error('Error saving reflection step data:', error);
+      }
+
+      // Save solution exploration data
+      try {
+        if (sessionId) {
+          const solutionsByReflection = validReflectionItems.map(item => ({
+            reflectionId: item.id,
+            userSolutions: (item.solutionInputs || []).map(solution => ({
+              solutionId: solution.id,
+              content: solution.content,
+              isAiGenerated: !!solution.aiSolutionTags,
+              selectedTags: solution.aiSolutionTags?.strengthTags || [],
+              strengthTags: solution.aiSolutionTags?.strengthTags || [],
+              solutionCategories: solution.aiSolutionTags?.solutionCategories || [],
+              originalAiSolution: solution.aiSolutionTags ? solution.content : undefined,
+              isModified: false, // TODO: track if user modified the solution
+              createdAt: new Date().toISOString(),
+              timestamp: new Date().toISOString()
+            }))
+          }));
+          
+          await saveSolutionExplorationData(sessionId, solutionsByReflection);
+        }
+      } catch (error) {
+        console.error('Error saving solution exploration data:', error);
+      }
+
+      // Save AI strength tags data
+      try {
+        if (sessionId) {
+          const strengthTagsByReflection = validReflectionItems.map(item => ({
+            reflectionId: item.id,
+            aiStrengthTags: (item.solutionInputs || [])
+              .filter(solution => solution.aiSolutionTags?.strengthTags)
+              .flatMap(solution => solution.aiSolutionTags?.strengthTags || []),
+            generatedAt: new Date().toISOString(),
+            timestamp: new Date().toISOString()
+          }));
+          
+          await saveAIStrengthTagsData(sessionId, strengthTagsByReflection);
+        }
+      } catch (error) {
+        console.error('Error saving AI strength tags data:', error);
+      }
+
+      // Save magic mix interaction data
+      try {
+        if (sessionId) {
+          await saveMagicMixInteractionData(sessionId, magicMixInteractions, totalMixCount, totalSolutionsAdded);
+        }
+      } catch (error) {
+        console.error('Error saving magic mix interaction data:', error);
+      }
+
       // 생성된 답장을 sessionStorage에 저장
       const responseLetterData = {
         letter: result.letter,
@@ -1341,6 +1588,22 @@ const Writing: React.FC = () => {
       };
 
       sessionStorage.setItem('responseLetterData', JSON.stringify(responseLetterData));
+
+      // Save original generated letter to database
+      try {
+        if (sessionId) {
+          await saveResponseLetterData(
+            sessionId,
+            result.letter,
+            result.letter, // initially same as original
+            characterName,
+            currentUser?.nickname || '익명의 사용자',
+            new Date().toISOString()
+          );
+        }
+      } catch (error) {
+        console.error('Error saving response letter data:', error);
+      }
 
       // 응답 편지 페이지로 이동
       router.push('/responseletter');
@@ -1507,7 +1770,7 @@ const Writing: React.FC = () => {
               <div className={styles.stepControlContainer}>
                 {!isUnderstandingCompleted ? (
                   <button
-                    onClick={() => setIsUnderstandingCompleted(true)}
+                    onClick={handleUnderstandingComplete}
                     className={styles.completeButton}
                     disabled={highlightedItems.length === 0}
                   >
@@ -1616,7 +1879,7 @@ const Writing: React.FC = () => {
               <div className={styles.stepControlContainer}>
                 {!isStrengthCompleted ? (
                   <button
-                    onClick={() => setIsStrengthCompleted(true)}
+                    onClick={handleStrengthComplete}
                     className={styles.completeButton}
                     disabled={strengthItems.length === 0}
                   >

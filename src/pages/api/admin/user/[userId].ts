@@ -1,5 +1,13 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getUserSessions, getUserQuestionAnswers } from '../../../../../lib/database';
+import { 
+  getUserByNickname, 
+  getUserQuestionAnswers, 
+  getAllGeneratedLetters,
+  getWritingStepData,
+  getReflectionStepData,
+  getMagicMixInteractionData,
+  getResponseLetterData
+} from '../../../../../lib/database';
 import redis from '../../../../../lib/upstash';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -7,99 +15,88 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ message: 'Method not allowed' });
   }
 
+  const { userId } = req.query;
+
+  if (!userId || typeof userId !== 'string') {
+    return res.status(400).json({ message: 'Invalid user ID' });
+  }
+
   try {
-    const { userId } = req.query;
-    
-    if (!userId) {
-      return res.status(400).json({ message: 'User ID is required' });
-    }
-    
-    // 사용자 정보 조회
-    const userData = await redis.get(userId as string);
+    // Get user data
+    const userData = await redis.get(userId);
     if (!userData) {
       return res.status(404).json({ message: 'User not found' });
     }
-    
+
     const user = typeof userData === 'object' ? userData : JSON.parse(userData as string);
-    
-    // 사용자 세션 조회
-    const sessions = await getUserSessions(userId as string);
-    
-    // 사용자 답변 조회
-    const answers = await getUserQuestionAnswers(userId as string);
-    
-    // 상세 통계 계산
-    let totalReflections = 0;
-    let completedReflections = 0;
-    let emotionChecks = { passed: 0, failed: 0 };
-    let blameChecks = { passed: 0, failed: 0 };
-    
-    const sessionDetails = sessions.map(session => {
-      let sessionReflections = 0;
-      let sessionCompletedReflections = 0;
-      
-      if (session.reflectionItems) {
-        sessionReflections = session.reflectionItems.length;
-        
-        session.reflectionItems.forEach(item => {
-          totalReflections++;
-          
-          if (item.inspectionStep === 3) {
-            sessionCompletedReflections++;
-            completedReflections++;
-          }
-          
-          // 감정 검사 통계
-          if (item.emotionCheckResult) {
-            if (item.emotionCheckResult.hasEmotion) {
-              emotionChecks.passed++;
-            } else {
-              emotionChecks.failed++;
-            }
-          }
-          
-          // 비난 패턴 검사 통계
-          if (item.blameCheckResult) {
-            if (item.blameCheckResult.hasBlamePattern) {
-              blameChecks.failed++;
-            } else {
-              blameChecks.passed++;
-            }
-          }
-        });
-      }
-      
-      return {
-        ...session,
-        reflectionCount: sessionReflections,
-        completedReflectionCount: sessionCompletedReflections,
-        highlightCount: session.highlightedItems ? session.highlightedItems.length : 0
-      };
-    });
-    
-    const userDetail = {
-      user: {
-        id: user.id,
-        nickname: user.nickname,
-        createdAt: user.createdAt
-      },
-      stats: {
-        totalSessions: sessions.length,
-        totalReflections,
-        completedReflections,
-        completionRate: totalReflections > 0 ? (completedReflections / totalReflections * 100).toFixed(1) : 0,
-        emotionChecks,
-        blameChecks,
-        totalAnswers: answers.length
-      },
-      sessions: sessionDetails,
-      answers
+
+    // Get all user's question answers
+    const questionAnswers = await getUserQuestionAnswers(userId);
+
+    // Get all generated letters for this user
+    const generatedLetters = await getAllGeneratedLetters(userId);
+
+    // Get writing logs from all sessions
+    const userSessions = await redis.lrange(`user_sessions:${userId}`, 0, -1);
+    let writingLogs = {
+      understandingStep: null,
+      strengthStep: null,
+      reflectionStep: null,
+      magicMixData: null,
+      solutionExploration: null,
+      inspectionData: null,
+      suggestionData: null
     };
-    
-    res.status(200).json(userDetail);
-    
+
+    // Collect data from all sessions
+    for (const sessionId of userSessions) {
+      try {
+        const understandingStep = await getWritingStepData(sessionId as string, 'understanding');
+        const strengthStep = await getWritingStepData(sessionId as string, 'strength_finding');
+        const reflectionStep = await getReflectionStepData(sessionId as string);
+        const magicMixData = await getMagicMixInteractionData(sessionId as string);
+
+        if (understandingStep && !writingLogs.understandingStep) {
+          writingLogs.understandingStep = understandingStep;
+        }
+        if (strengthStep && !writingLogs.strengthStep) {
+          writingLogs.strengthStep = strengthStep;
+        }
+        if (reflectionStep && !writingLogs.reflectionStep) {
+          writingLogs.reflectionStep = reflectionStep;
+        }
+        if (magicMixData && !writingLogs.magicMixData) {
+          writingLogs.magicMixData = magicMixData;
+        }
+      } catch (error) {
+        console.error(`Error getting data for session ${sessionId}:`, error);
+      }
+    }
+
+    // Get response letters
+    const responseLetters = [];
+    for (const sessionId of userSessions) {
+      try {
+        const responseData = await getResponseLetterData(sessionId as string);
+        if (responseData) {
+          responseLetters.push(responseData);
+        }
+      } catch (error) {
+        console.error(`Error getting response letter for session ${sessionId}:`, error);
+      }
+    }
+
+    const result = {
+      user,
+      questionAnswers,
+      generatedLetters,
+      writingLogs,
+      responseLetters
+    };
+
+    res.status(200).json(result);
   } catch (error) {
-    console.error('Error fetching user detail:', error);
+    console.error('Error fetching user data:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 }
