@@ -34,7 +34,10 @@ export default function Home() {
         return;
       }
 
-      // 로그인 실패 시 회원가입 시도
+      // 로그인 실패 시 - 닉네임 존재 여부 확인 후 적절한 메시지 표시
+      const loginError = await loginResponse.json();
+      
+      // 회원가입 시도 (닉네임 중복 확인용)
       const registerResponse = await fetch('/api/auth/register', {
         method: 'POST',
         headers: {
@@ -53,8 +56,14 @@ export default function Home() {
           query: { userId: user.id, nickname: user.nickname }
         });
       } else {
-        const errorData = await registerResponse.json();
-        setError(errorData.message || '오류가 발생했습니다.');
+        const registerError = await registerResponse.json();
+        
+        // 닉네임이 이미 있는 경우 - 비밀번호가 틀렸다는 메시지
+        if (registerError.message === 'Nickname already exists') {
+          setError('비밀번호가 틀렸습니다. 다시 시도해주세요.');
+        } else {
+          setError(registerError.message || '오류가 발생했습니다.');
+        }
       }
 
     } catch (error) {

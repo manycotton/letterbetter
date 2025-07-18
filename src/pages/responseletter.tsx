@@ -45,10 +45,14 @@ export default function ResponseLetter() {
   };
 
   const handleSendLetter = () => {
-    // 편지 보내기 - 실제로는 완료 처리
-    alert(`${letterData?.characterName}에게 편지를 보냈습니다! 💌`);
-    sessionStorage.removeItem('responseLetterData');
-    router.push('/');
+    // 편지 완료 페이지로 이동하기 위한 데이터 저장
+    const completeData = {
+      characterName: letterData?.characterName || '뚜뚜',
+      userNickname: letterData?.userNickname || '사용자'
+    };
+    
+    sessionStorage.setItem('letterCompleteData', JSON.stringify(completeData));
+    router.push('/lettercomplete');
   };
 
   const handleGoBack = () => {
@@ -100,6 +104,10 @@ export default function ResponseLetter() {
 
   return (
     <div className={styles.container}>
+      <button onClick={handleGoBack} className={styles.backButtonTop}>
+        ← 뒤로가기
+      </button>
+      
       <div className={styles.header}>
         <h1 className={styles.title}>
           💌 {letterData.userNickname}님이 {letterData.characterName}에게 보내는 편지 ✨
@@ -139,9 +147,6 @@ export default function ResponseLetter() {
       </div>
 
       <div className={styles.actions}>
-        <button onClick={handleGoBack} className={styles.goBackButton}>
-          ⬅️ 뒤로가기
-        </button>
         <button onClick={handleEditToggle} className={styles.editButton}>
           {isEditing ? '✅ 편지쓰기 완료' : '✏️ 편지 수정'}
         </button>

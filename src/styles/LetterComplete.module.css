@@ -1,0 +1,182 @@
+.container {
+  min-height: 100vh;
+  background: var(--background);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px;
+  max-width: 600px;
+  width: 100%;
+}
+
+.messageBox {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  padding: 60px 40px;
+  text-align: center;
+  backdrop-filter: blur(10px);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.icon {
+  font-size: 80px;
+  margin-bottom: 30px;
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.title {
+  font-family: 'DungGeunMo', monospace;
+  font-size: 32px;
+  color: #ffffff;
+  margin: 0 0 20px 0;
+  text-shadow: 
+    1px 1px 0px #000000,
+    2px 2px 0px #333333;
+  line-height: 1.4;
+}
+
+.message {
+  font-family: 'DungGeunMo', monospace;
+  font-size: 20px;
+  color: #ffd100;
+  margin: 0 0 15px 0;
+  text-shadow: 1px 1px 0px #000000;
+  font-weight: bold;
+}
+
+.subMessage {
+  font-family: 'DungGeunMo', monospace;
+  font-size: 16px;
+  color: #ffffff;
+  margin: 0;
+  text-shadow: 1px 1px 0px #000000;
+  line-height: 1.6;
+  opacity: 0.9;
+}
+
+.actions {
+  display: flex;
+  justify-content: center;
+}
+
+.homeButton {
+  background: #ffd100;
+  border: none;
+  border-radius: 12px;
+  padding: 20px 40px;
+  font-family: 'DungGeunMo', monospace;
+  font-size: 18px;
+  color: #000000;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-shadow: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 4px 15px rgba(255, 209, 0, 0.3);
+}
+
+.homeButton:hover {
+  background: #ffdc33;
+  transform: translateY(-3px);
+  box-shadow: 0 6px 20px rgba(255, 209, 0, 0.4);
+}
+
+.homeButton:active {
+  transform: translateY(-1px);
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 50vh;
+}
+
+.loading p {
+  font-family: 'DungGeunMo', monospace;
+  font-size: 18px;
+  color: #ffffff;
+  text-shadow: 1px 1px 0px #000000;
+}
+
+@media (max-width: 768px) {
+  .messageBox {
+    padding: 40px 30px;
+  }
+  
+  .title {
+    font-size: 24px;
+  }
+  
+  .message {
+    font-size: 18px;
+  }
+  
+  .subMessage {
+    font-size: 14px;
+  }
+  
+  .homeButton {
+    padding: 16px 32px;
+    font-size: 16px;
+  }
+  
+  .icon {
+    font-size: 60px;
+    margin-bottom: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .container {
+    padding: 15px;
+  }
+  
+  .messageBox {
+    padding: 30px 20px;
+  }
+  
+  .title {
+    font-size: 20px;
+  }
+  
+  .message {
+    font-size: 16px;
+  }
+  
+  .subMessage {
+    font-size: 13px;
+  }
+  
+  .homeButton {
+    padding: 14px 28px;
+    font-size: 14px;
+    width: 100%;
+    max-width: 300px;
+    justify-content: center;
+  }
+  
+  .icon {
+    font-size: 50px;
+    margin-bottom: 15px;
+  }
+}
