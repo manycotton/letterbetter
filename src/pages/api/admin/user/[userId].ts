@@ -8,6 +8,14 @@ import {
   getMagicMixInteractionData,
   getResponseLetterData
 } from '../../../../../lib/database';
+import { 
+  WritingStepData, 
+  ReflectionStepData, 
+  MagicMixInteractionData, 
+  SolutionExplorationData,
+  InspectionData,
+  SuggestionData
+} from '../../../../../types/database';
 import redis from '../../../../../lib/upstash';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -38,7 +46,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Get writing logs from all sessions
     const userSessions = await redis.lrange(`user_sessions:${userId}`, 0, -1);
-    let writingLogs = {
+    let writingLogs: {
+      understandingStep: WritingStepData | null;
+      strengthStep: WritingStepData | null;
+      reflectionStep: ReflectionStepData | null;
+      magicMixData: MagicMixInteractionData | null;
+      solutionExploration: SolutionExplorationData | null;
+      inspectionData: InspectionData | null;
+      suggestionData: SuggestionData | null;
+    } = {
       understandingStep: null,
       strengthStep: null,
       reflectionStep: null,
