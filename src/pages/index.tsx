@@ -75,7 +75,7 @@ export default function Home() {
   };
 
   const handleModalClose = () => {
-    setIsModalOpen(false);
+    // 모달 외부 클릭 시 아무 일도 하지 않음
   };
 
   return (

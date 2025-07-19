@@ -341,23 +341,28 @@ export async function updateReflectionHints(hintsId: string, generatedHints: str
 }
 
 // Writing Step Data functions
-export async function saveWritingStepData(sessionId: string, stepType: 'understanding' | 'strength_finding', highlightedItems: HighlightedItem[], userAnswers: {itemId: string; answer: string}[]): Promise<WritingStepData> {
-  const stepDataId = `writing_step:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
-  
-  const stepData: WritingStepData = {
-    id: stepDataId,
-    sessionId,
-    stepType,
-    highlightedItems,
-    userAnswers,
-    completedAt: new Date().toISOString(),
-    createdAt: new Date().toISOString()
-  };
+export async function saveWritingStepData(sessionId: string, stepType: 'understanding' | 'strength_finding', highlightedItems: HighlightedItem[], userAnswers: {itemId: string; answers: {question: string; answer: string}[]; timestamp: string}[]): Promise<WritingStepData> {
+  try {
+    const stepDataId = `writing_step:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
+    
+    const stepData: WritingStepData = {
+      id: stepDataId,
+      sessionId,
+      stepType,
+      highlightedItems,
+      userAnswers,
+      completedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString()
+    };
 
-  await redis.set(stepDataId, JSON.stringify(stepData));
-  await redis.set(`session_${stepType}:${sessionId}`, stepDataId);
-  
-  return stepData;
+    await redis.set(stepDataId, JSON.stringify(stepData));
+    await redis.set(`session_${stepType}:${sessionId}`, stepDataId);
+    
+    return stepData;
+  } catch (error) {
+    console.error('Error saving writing step data:', error);
+    throw new Error(`Failed to save writing step data: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 export async function getWritingStepData(sessionId: string, stepType: 'understanding' | 'strength_finding'): Promise<WritingStepData | null> {

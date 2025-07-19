@@ -6,7 +6,12 @@ import {
   getWritingStepData,
   getReflectionStepData,
   getMagicMixInteractionData,
-  getResponseLetterData
+  getResponseLetterData,
+  getSolutionExplorationData,
+  getInspectionData,
+  getSuggestionData,
+  getLetterContentData,
+  getAIStrengthTagsData
 } from '../../../../../lib/database';
 import { 
   WritingStepData, 
@@ -14,7 +19,9 @@ import {
   MagicMixInteractionData, 
   SolutionExplorationData,
   InspectionData,
-  SuggestionData
+  SuggestionData,
+  LetterContentData,
+  AIStrengthTagsData
 } from '../../../../../types/database';
 import redis from '../../../../../lib/upstash';
 
@@ -54,6 +61,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       solutionExploration: SolutionExplorationData | null;
       inspectionData: InspectionData | null;
       suggestionData: SuggestionData | null;
+      letterContentData: LetterContentData | null;
+      aiStrengthTagsData: AIStrengthTagsData | null;
     } = {
       understandingStep: null,
       strengthStep: null,
@@ -61,7 +70,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       magicMixData: null,
       solutionExploration: null,
       inspectionData: null,
-      suggestionData: null
+      suggestionData: null,
+      letterContentData: null,
+      aiStrengthTagsData: null
     };
 
     // Collect data from all sessions
@@ -71,6 +82,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const strengthStep = await getWritingStepData(sessionId as string, 'strength_finding');
         const reflectionStep = await getReflectionStepData(sessionId as string);
         const magicMixData = await getMagicMixInteractionData(sessionId as string);
+        const solutionExploration = await getSolutionExplorationData(sessionId as string);
+        const inspectionData = await getInspectionData(sessionId as string);
+        const suggestionData = await getSuggestionData(sessionId as string);
+        const letterContentData = await getLetterContentData(sessionId as string);
+        const aiStrengthTagsData = await getAIStrengthTagsData(sessionId as string);
 
         if (understandingStep && !writingLogs.understandingStep) {
           writingLogs.understandingStep = understandingStep;
@@ -83,6 +99,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
         if (magicMixData && !writingLogs.magicMixData) {
           writingLogs.magicMixData = magicMixData;
+        }
+        if (solutionExploration && !writingLogs.solutionExploration) {
+          writingLogs.solutionExploration = solutionExploration;
+        }
+        if (inspectionData && !writingLogs.inspectionData) {
+          writingLogs.inspectionData = inspectionData;
+        }
+        if (suggestionData && !writingLogs.suggestionData) {
+          writingLogs.suggestionData = suggestionData;
+        }
+        if (letterContentData && !writingLogs.letterContentData) {
+          writingLogs.letterContentData = letterContentData;
+        }
+        if (aiStrengthTagsData && !writingLogs.aiStrengthTagsData) {
+          writingLogs.aiStrengthTagsData = aiStrengthTagsData;
         }
       } catch (error) {
         console.error(`Error getting data for session ${sessionId}:`, error);

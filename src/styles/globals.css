@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700&display=swap');
 
 @font-face {
   font-family: 'DungGeunMo';
@@ -50,4 +51,26 @@ body {
   font-smooth: never;
   -webkit-font-smoothing: none;
   -moz-osx-font-smoothing: unset;
+}
+
+/* Admin 페이지 전용 스타일 오버라이드 */
+.admin-page {
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif !important;
+  font-smooth: auto !important;
+  -webkit-font-smoothing: antialiased !important;
+  -moz-osx-font-smoothing: grayscale !important;
+  image-rendering: auto !important;
+}
+
+.admin-page * {
+  font-family: inherit !important;
+  font-smooth: inherit !important;
+  -webkit-font-smoothing: inherit !important;
+  -moz-osx-font-smoothing: inherit !important;
+  image-rendering: inherit !important;
+}
+
+/* Admin 페이지 body 배경 */
+body.admin-body {
+  background: #ffffff !important;
 }

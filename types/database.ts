@@ -137,7 +137,11 @@ export interface WritingStepData {
   highlightedItems: HighlightedItem[];
   userAnswers: {
     itemId: string;
-    answer: string;
+    answers: {
+      question: string;
+      answer: string;
+    }[];
+    timestamp: string;
   }[];
   completedAt: string;
   createdAt: string;

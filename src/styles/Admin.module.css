@@ -1,45 +1,117 @@
-/* Admin Main Page Styles */
+/* 토스 스타일 Admin 페이지 */
+@import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700&display=swap');
+
+/* 공통 스타일 */
 .container {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 20px;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  padding: 24px;
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+  background: #ffffff;
+  min-height: 100vh;
+  box-sizing: border-box;
 }
 
+.container *,
+.container *::before,
+.container *::after {
+  box-sizing: border-box;
+}
+
+/* 헤더 스타일 */
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 30px;
-  padding-bottom: 20px;
-  border-bottom: 2px solid #e0e0e0;
+  margin-bottom: 32px;
+  padding: 0;
+  border: none;
+}
+
+.headerControls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
 }
 
 .title {
-  font-size: 32px;
-  font-weight: 600;
-  color: #333;
+  font-size: 28px;
+  font-weight: 700;
+  color: #191f28;
   margin: 0;
+  letter-spacing: -0.02em;
 }
 
 .stats {
   display: flex;
-  gap: 20px;
+  gap: 16px;
 }
 
 .statItem {
-  background: #f8f9fa;
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-weight: 500;
-  color: #495057;
-  border: 1px solid #e9ecef;
+  background: #ffffff;
+  padding: 12px 20px;
+  border-radius: 12px;
+  font-weight: 600;
+  color: #191f28;
+  border: 1px solid #e5e8eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  font-size: 14px;
 }
 
-.content {
-  background: white;
+.controls {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.refreshButton {
+  background: #10b981;
+  color: white;
+  border: none;
+  padding: 10px 16px;
   border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  letter-spacing: -0.01em;
+}
+
+.refreshButton:hover:not(:disabled) {
+  background: #059669;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.refreshButton:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.toggleLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #4e5968;
+  cursor: pointer;
+}
+
+.toggleLabel input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+
+/* 컨텐츠 영역 */
+.content {
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e5e8eb;
   overflow: hidden;
 }
 
@@ -55,20 +127,28 @@
 
 .table th {
   background: #f8f9fa;
-  padding: 16px;
+  padding: 12px 24px;
   text-align: left;
   font-weight: 600;
-  color: #495057;
-  border-bottom: 2px solid #e9ecef;
+  color: #4e5968;
+  border-bottom: 1px solid #e5e8eb;
   font-size: 14px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: -0.01em;
 }
 
 .table td {
-  padding: 16px;
-  border-bottom: 1px solid #e9ecef;
+  padding: 12px 24px;
+  border-bottom: 1px solid #f1f3f4;
   vertical-align: middle;
+}
+
+.table td:nth-child(2),
+.table th:nth-child(2) {
+  text-align: center;
+}
+
+.table tr:last-child td {
+  border-bottom: none;
 }
 
 .table tr:hover {
@@ -77,308 +157,557 @@
 
 .nickname {
   font-weight: 600;
-  color: #495057;
+  color: #191f28;
   font-size: 16px;
+  letter-spacing: -0.01em;
 }
 
 .password {
-  font-family: 'Courier New', monospace;
-  color: #6c757d;
-  font-size: 14px;
-  background: #f8f9fa;
-  padding: 4px 8px;
-  border-radius: 4px;
-  display: inline-block;
+  font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Roboto Mono', monospace;
+  color: #6b7684;
+  font-size: 13px;
+  letter-spacing: 0;
+  text-align: center;
+  vertical-align: middle;
 }
 
 .date {
-  color: #6c757d;
+  color: #6b7684;
   font-size: 14px;
+  font-weight: 400;
+}
+
+.actionButtons {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
 }
 
 .detailButton {
-  background: #007bff;
+  background: #3182f6;
   color: white;
   border: none;
   padding: 8px 16px;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
-  font-weight: 500;
-  font-size: 14px;
+  font-weight: 600;
+  font-size: 13px;
   transition: all 0.2s ease;
+  letter-spacing: -0.01em;
 }
 
 .detailButton:hover {
-  background: #0056b3;
+  background: #2564d9;
   transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(49, 130, 246, 0.3);
 }
 
+.detailButton:active {
+  transform: translateY(0);
+}
+
+.deleteButton {
+  background: #f04452;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  transition: all 0.2s ease;
+  letter-spacing: -0.01em;
+}
+
+.deleteButton:hover:not(:disabled) {
+  background: #d73a49;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(240, 68, 82, 0.3);
+}
+
+.deleteButton:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.deleteButton:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* 로딩 및 에러 상태 */
 .loading {
   text-align: center;
-  padding: 50px;
-  font-size: 18px;
-  color: #6c757d;
+  padding: 80px 20px;
+  font-size: 16px;
+  color: #6b7684;
+  font-weight: 500;
 }
 
 .error {
   text-align: center;
-  padding: 50px;
-  font-size: 18px;
-  color: #dc3545;
-  background: #f8d7da;
-  border: 1px solid #f5c6cb;
-  border-radius: 8px;
+  padding: 40px 20px;
+  font-size: 16px;
+  color: #f04452;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  margin: 20px;
+  font-weight: 500;
 }
 
 .empty {
   text-align: center;
-  padding: 50px;
-  color: #6c757d;
+  padding: 80px 20px;
+  color: #6b7684;
   font-size: 16px;
+  font-weight: 500;
 }
 
-/* User Detail Page Styles */
+/* 유저 상세 페이지 스타일 */
 .userDetailContainer {
   max-width: 1400px;
   margin: 0 auto;
-  padding: 20px;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  padding: 24px;
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+  background: #ffffff;
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+.userDetailContainer *,
+.userDetailContainer *::before,
+.userDetailContainer *::after {
+  box-sizing: border-box;
 }
 
 .userDetailHeader {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 30px;
-  padding-bottom: 20px;
-  border-bottom: 2px solid #e0e0e0;
+  margin-bottom: 32px;
+  padding: 0;
+  border: none;
+}
+
+.headerActions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.refreshInfo {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.lastUpdated {
+  font-size: 12px;
+  color: #6b7684;
+  font-weight: 500;
+}
+
+.refreshControls {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.actionButtons {
+  display: flex;
+  gap: 12px;
+  align-items: center;
 }
 
 .userDetailTitle {
-  font-size: 28px;
-  font-weight: 600;
-  color: #333;
+  font-size: 24px;
+  font-weight: 700;
+  color: #191f28;
   margin: 0;
+  letter-spacing: -0.02em;
 }
 
 .backButton {
-  background: #6c757d;
+  background: #6b7684;
   color: white;
   border: none;
-  padding: 10px 20px;
-  border-radius: 6px;
+  padding: 12px 20px;
+  border-radius: 8px;
   cursor: pointer;
-  font-weight: 500;
+  font-weight: 600;
   text-decoration: none;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   transition: all 0.2s ease;
+  font-size: 14px;
+  letter-spacing: -0.01em;
 }
 
 .backButton:hover {
-  background: #5a6268;
+  background: #4e5968;
   transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(107, 118, 132, 0.3);
+  color: white;
+  text-decoration: none;
 }
 
+.backButton:active {
+  transform: translateY(0);
+}
+
+.deleteUserButton {
+  background: #f04452;
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+}
+
+.deleteUserButton:hover:not(:disabled) {
+  background: #d73a49;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(240, 68, 82, 0.3);
+}
+
+.deleteUserButton:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.deleteUserButton:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* 탭 컨테이너 */
 .tabContainer {
   display: flex;
-  gap: 30px;
-  height: calc(100vh - 150px);
+  gap: 24px;
+  min-height: calc(100vh - 200px);
 }
 
 .sidebar {
-  width: 250px;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  padding: 0;
-  overflow: hidden;
+  width: 280px;
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e5e8eb;
+  padding: 8px;
+  height: fit-content;
 }
 
 .tabList {
   list-style: none;
   padding: 0;
   margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .tabItem {
-  border-bottom: 1px solid #e9ecef;
-}
-
-.tabItem:last-child {
-  border-bottom: none;
+  border: none;
 }
 
 .tabButton {
   width: 100%;
-  padding: 20px;
+  padding: 16px 20px;
   background: none;
   border: none;
   text-align: left;
   cursor: pointer;
-  font-size: 16px;
-  font-weight: 500;
-  color: #495057;
+  font-size: 15px;
+  font-weight: 600;
+  color: #6b7684;
   transition: all 0.2s ease;
   display: block;
+  border-radius: 12px;
+  letter-spacing: -0.01em;
 }
 
 .tabButton:hover {
   background: #f8f9fa;
+  color: #191f28;
 }
 
 .tabButton.active {
-  background: #007bff;
+  background: #3182f6;
   color: white;
+  box-shadow: 0 2px 8px rgba(49, 130, 246, 0.3);
 }
 
+/* 탭 콘텐츠 */
 .tabContent {
   flex: 1;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  padding: 30px;
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e5e8eb;
+  padding: 32px;
   overflow-y: auto;
+  max-height: calc(100vh - 200px);
 }
 
 .tabTitle {
-  font-size: 24px;
-  font-weight: 600;
-  color: #333;
-  margin-bottom: 20px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #191f28;
+  margin-bottom: 24px;
+  letter-spacing: -0.02em;
 }
 
 .section {
-  margin-bottom: 30px;
+  margin-bottom: 32px;
 }
 
 .sectionTitle {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
-  color: #495057;
-  margin-bottom: 15px;
-  border-bottom: 2px solid #e9ecef;
+  color: #191f28;
+  margin-bottom: 16px;
   padding-bottom: 8px;
+  border-bottom: 2px solid #f1f3f4;
+  letter-spacing: -0.01em;
 }
 
 .dataGrid {
   display: grid;
-  gap: 15px;
+  gap: 12px;
 }
 
 .dataItem {
   background: #f8f9fa;
-  padding: 15px;
-  border-radius: 6px;
-  border-left: 4px solid #007bff;
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid #e5e8eb;
+  transition: all 0.2s ease;
+}
+
+.dataItem:hover {
+  border-color: #d1d5db;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
 .dataLabel {
   font-weight: 600;
-  color: #495057;
-  margin-bottom: 5px;
-  font-size: 14px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  color: #4e5968;
+  margin-bottom: 8px;
+  font-size: 13px;
+  letter-spacing: -0.01em;
 }
 
 .dataValue {
-  color: #212529;
-  font-size: 16px;
-  line-height: 1.5;
+  color: #191f28;
+  font-size: 15px;
+  line-height: 1.6;
+  font-weight: 400;
+  letter-spacing: -0.01em;
 }
 
 .codeBlock {
   background: #f8f9fa;
-  border: 1px solid #e9ecef;
-  border-radius: 6px;
-  padding: 15px;
-  font-family: 'Courier New', monospace;
-  font-size: 14px;
+  border: 1px solid #e5e8eb;
+  border-radius: 8px;
+  padding: 16px;
+  font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Roboto Mono', monospace;
+  font-size: 13px;
   overflow-x: auto;
   white-space: pre-wrap;
   word-wrap: break-word;
+  color: #191f28;
+  line-height: 1.5;
 }
 
 .tagList {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  margin-top: 8px;
 }
 
 .tag {
   background: #e7f3ff;
-  color: #0066cc;
-  padding: 4px 12px;
+  color: #3182f6;
+  padding: 6px 12px;
   border-radius: 16px;
   font-size: 12px;
-  font-weight: 500;
-  border: 1px solid #b3d9ff;
+  font-weight: 600;
+  border: 1px solid #bfdbfe;
+  letter-spacing: -0.01em;
 }
 
 .stepItem {
-  margin-bottom: 25px;
-  padding: 20px;
-  background: #f8f9fa;
-  border-radius: 8px;
-  border: 1px solid #e9ecef;
+  margin-bottom: 20px;
+  padding: 24px;
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #e5e8eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .stepHeader {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 15px;
+  margin-bottom: 16px;
 }
 
 .stepTitle {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
-  color: #495057;
+  color: #191f28;
+  letter-spacing: -0.01em;
 }
 
 .stepTimestamp {
   font-size: 12px;
-  color: #6c757d;
-  background: white;
+  color: #6b7684;
+  background: #f8f9fa;
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: 6px;
+  font-weight: 500;
 }
 
 .noData {
   text-align: center;
-  padding: 50px;
-  color: #6c757d;
-  font-style: italic;
+  padding: 60px 20px;
+  color: #6b7684;
+  font-size: 16px;
+  font-weight: 500;
 }
 
-/* Responsive Design */
-@media (max-width: 768px) {
+/* 반응형 디자인 */
+@media (max-width: 1024px) {
   .tabContainer {
     flex-direction: column;
-    height: auto;
+    gap: 16px;
   }
 
   .sidebar {
     width: 100%;
-    margin-bottom: 20px;
+    margin-bottom: 0;
   }
 
   .tabList {
-    display: flex;
+    flex-direction: row;
     overflow-x: auto;
+    gap: 8px;
+    padding: 4px;
   }
 
   .tabItem {
-    border-bottom: none;
-    border-right: 1px solid #e9ecef;
-    min-width: 150px;
-  }
-
-  .tabItem:last-child {
-    border-right: none;
+    flex-shrink: 0;
   }
 
   .tabButton {
     white-space: nowrap;
+    min-width: 120px;
+  }
+
+  .tabContent {
+    max-height: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .container,
+  .userDetailContainer {
+    padding: 16px;
+  }
+
+  .header,
+  .userDetailHeader {
+    flex-direction: column;
+    gap: 16px;
+    align-items: flex-start;
+  }
+
+  .headerActions {
+    width: 100%;
+    align-items: flex-start;
+  }
+
+  .refreshInfo {
+    align-items: flex-start;
+  }
+
+  .refreshControls {
+    flex-wrap: wrap;
+  }
+
+  .actionButtons {
+    flex-wrap: wrap;
+  }
+
+  .title,
+  .userDetailTitle {
+    font-size: 24px;
+  }
+
+  .stats {
+    width: 100%;
+  }
+
+  .statItem {
+    flex: 1;
+    text-align: center;
+  }
+
+  .table th,
+  .table td {
+    padding: 8px 12px;
+  }
+
+  .tabContent {
+    padding: 20px;
+  }
+
+  .tabTitle {
+    font-size: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .tableContainer {
+    font-size: 14px;
+  }
+
+  .table th,
+  .table td {
+    padding: 6px 8px;
+  }
+
+  .nickname {
+    font-size: 14px;
+  }
+
+  .password {
+    font-size: 12px;
+  }
+
+  .detailButton,
+  .deleteButton {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+
+  .deleteUserButton {
+    padding: 8px 12px;
+    font-size: 13px;
   }
 }

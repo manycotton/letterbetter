@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import styles from '../styles/Writing.module.css';
-import { saveWritingStepData, saveInspectionData, saveSuggestionData, saveReflectionStepData, saveSolutionExplorationData, saveAIStrengthTagsData, saveMagicMixInteractionData, updateMagicMixInteractionData, saveResponseLetterData } from '../../lib/database';
+// 모든 데이터 저장은 API 엔드포인트를 통해 처리합니다
 
 
 interface HighlightedItem {
@@ -86,7 +86,9 @@ const Writing: React.FC = () => {
       aiSuggestions: [],
       isLoadingAiSuggestions: false,
       selectedAiSuggestions: [],
-      solutionInputs: [{ id: Date.now().toString(), content: '', showStrengthHelper: false }]
+      solutionInputs: [{ id: Date.now().toString(), content: '', showStrengthHelper: false }],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     }
   ]);
   const [strengthItems, setStrengthItems] = useState<StrengthItem[]>([]);
@@ -315,14 +317,37 @@ const Writing: React.FC = () => {
       if (sessionId) {
         const userAnswers = highlightedItems.map(item => ({
           itemId: item.id,
-          answer: item.userExplanation || item.problemReason || '',
+          answers: [
+            { question: 'problemReason', answer: item.problemReason || '' },
+            { question: 'userExplanation', answer: item.userExplanation || '' },
+            { question: 'emotionInference', answer: item.emotionInference || '' }
+          ],
           timestamp: new Date().toISOString()
         }));
         
-        await saveWritingStepData(sessionId, 'understanding', highlightedItems, userAnswers);
+        const response = await fetch('/api/writing-step/save', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sessionId,
+            stepType: 'understanding',
+            highlightedItems,
+            userAnswers
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to save writing step data');
+        }
       }
     } catch (error) {
       console.error('Error saving understanding step data:', error);
+      // 사용자에게 에러 알림 (선택사항)
+      alert('데이터 저장 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+      // 완료 상태를 되돌림
+      setIsUnderstandingCompleted(false);
     }
   };
 
@@ -334,14 +359,36 @@ const Writing: React.FC = () => {
       if (sessionId) {
         const userAnswers = strengthItems.map(item => ({
           itemId: item.id,
-          answer: item.strengthDescription || item.strengthApplication || '',
+          answers: [
+            { question: 'strengthDescription', answer: item.strengthDescription || '' },
+            { question: 'strengthApplication', answer: item.strengthApplication || '' }
+          ],
           timestamp: new Date().toISOString()
         }));
         
-        await saveWritingStepData(sessionId, 'strength_finding', strengthItems, userAnswers);
+        const response = await fetch('/api/writing-step/save', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sessionId,
+            stepType: 'strength_finding',
+            highlightedItems: strengthItems,
+            userAnswers
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to save writing step data');
+        }
       }
     } catch (error) {
       console.error('Error saving strength finding step data:', error);
+      // 사용자에게 에러 알림 (선택사항)
+      alert('데이터 저장 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+      // 완료 상태를 되돌림
+      setIsStrengthCompleted(false);
     }
   };
 
@@ -419,9 +466,25 @@ const Writing: React.FC = () => {
             if (!sessionId) {
               setSessionId(session.id);
             }
+          } else {
+            // HTTP 에러 상태 처리
+            const errorText = await response.text();
+            console.error('Session save failed:', response.status, errorText);
+            
+            // JSON 파싱 시도
+            try {
+              const errorData = JSON.parse(errorText);
+              console.error('Session save error details:', errorData);
+            } catch (parseError) {
+              console.error('Non-JSON error response:', errorText);
+            }
           }
         } catch (error) {
           console.error('Error saving session:', error);
+          // 네트워크 에러나 기타 예외 처리
+          if (error instanceof TypeError && error.message.includes('fetch')) {
+            console.error('Network error - check if server is running');
+          }
         }
       };
 
@@ -604,7 +667,10 @@ const Writing: React.FC = () => {
       personalReflection: '',
       aiSuggestions: [],
       isLoadingAiSuggestions: false,
-      selectedAiSuggestions: []
+      selectedAiSuggestions: [],
+      solutionInputs: [{ id: Date.now().toString(), content: '', showStrengthHelper: false }],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
     setReflectionItems(prev => [...prev, newItem]);
   };
@@ -613,11 +679,6 @@ const Writing: React.FC = () => {
     setReflectionItems(prev => prev.filter(item => item.id !== id));
   };
 
-  const updateReflectionItem = (id: string, content: string) => {
-    setReflectionItems(prev => prev.map(item => 
-      item.id === id ? { ...item, content } : item
-    ));
-  };
 
   // 힌트 태그 선택 함수
   const selectReflectionHint = (hint: string) => {
@@ -698,6 +759,72 @@ const Writing: React.FC = () => {
           textarea.style.height = Math.max(40, textarea.scrollHeight) + 'px';
         }
       }, 0);
+    }
+  };
+
+  // 고민 아이템 업데이트 함수
+  const updateReflectionItem = (id: string, content: string) => {
+    setReflectionItems(prev => prev.map(item => 
+      item.id === id 
+        ? { ...item, content, updatedAt: new Date().toISOString() }
+        : item
+    ));
+    
+    // 내용이 변경되면 자동으로 데이터 저장 (디바운스 적용)
+    if (content.trim() && sessionId) {
+      debouncedSaveReflectionData();
+    }
+  };
+
+  // 디바운스된 데이터 저장 함수
+  const debouncedSaveReflectionData = React.useMemo(() => {
+    let timeoutId: NodeJS.Timeout;
+    return () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        saveReflectionDataToDatabase();
+      }, 2000); // 2초 후 저장
+    };
+  }, []);
+
+  // 고민 데이터를 데이터베이스에 저장하는 함수
+  const saveReflectionDataToDatabase = async () => {
+    if (!sessionId) return;
+    
+    try {
+      const selectedHintTags = reflectionItems.map(item => ({
+        reflectionId: item.id,
+        tags: item.selectedHints || []
+      }));
+      
+      const allGeneratedHints = reflectionHints;
+      
+      const formattedReflectionItems = reflectionItems.map(item => ({
+        ...item,
+        createdAt: item.createdAt || new Date().toISOString(),
+        updatedAt: item.updatedAt || new Date().toISOString()
+      }));
+      
+      const response = await fetch('/api/writing-step/save-reflection', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sessionId,
+          reflectionItems: formattedReflectionItems,
+          selectedHintTags,
+          allGeneratedHints
+        })
+      });
+      
+      if (!response.ok) {
+        console.error('Failed to save reflection data:', await response.json());
+      } else {
+        console.log('Reflection data auto-saved successfully');
+      }
+    } catch (error) {
+      console.error('Error auto-saving reflection data:', error);
     }
   };
 
@@ -815,10 +942,63 @@ const Writing: React.FC = () => {
             emotionCheck: emotionResult,
             blameCheck: blameResult
           }];
-          await saveInspectionData(sessionId, inspectionResults);
+          // Save inspection data via API
+          const inspectionResponse = await fetch('/api/writing-step/save-inspection', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              sessionId,
+              inspectionResults
+            })
+          });
+          
+          if (!inspectionResponse.ok) {
+            console.error('Failed to save inspection data:', await inspectionResponse.json());
+          }
         }
       } catch (error) {
         console.error('Error saving inspection data:', error);
+      }
+
+      // Save reflection step data immediately after completion
+      try {
+        if (sessionId) {
+          const selectedHintTags = reflectionItems.map(item => ({
+            reflectionId: item.id,
+            tags: item.selectedHints || []
+          }));
+          
+          const allGeneratedHints = reflectionHints;
+          
+          const formattedReflectionItems = reflectionItems.map(item => ({
+            ...item,
+            createdAt: item.createdAt || new Date().toISOString(),
+            updatedAt: item.updatedAt || new Date().toISOString()
+          }));
+          
+          const reflectionResponse = await fetch('/api/writing-step/save-reflection', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              sessionId,
+              reflectionItems: formattedReflectionItems,
+              selectedHintTags,
+              allGeneratedHints
+            })
+          });
+          
+          if (!reflectionResponse.ok) {
+            console.error('Failed to save reflection data:', await reflectionResponse.json());
+          } else {
+            console.log('Reflection data saved successfully after completion');
+          }
+        }
+      } catch (error) {
+        console.error('Error saving reflection data:', error);
       }
 
     } catch (error) {
@@ -1497,7 +1677,18 @@ const Writing: React.FC = () => {
             return acc;
           }, [] as string[]);
           
-          await saveSuggestionData(sessionId, suggestionResults, allGeneratedFactors);
+          // Save suggestion data via API
+          await fetch('/api/writing-step/save-suggestion', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              sessionId,
+              suggestionResults,
+              allGeneratedFactors
+            })
+          });
         }
       } catch (error) {
         console.error('Error saving suggestion data:', error);
@@ -1511,8 +1702,8 @@ const Writing: React.FC = () => {
             tags: item.selectedHints || []
           }));
           
-          // Collect all generated hints from session storage or other sources
-          const allGeneratedHints = JSON.parse(sessionStorage.getItem('generatedHints') || '[]');
+          // Collect all generated hints from the current state
+          const allGeneratedHints = reflectionHints;
           
           // Filter and format reflection items for database
           const formattedReflectionItems = validReflectionItems.map(item => ({
@@ -1521,7 +1712,27 @@ const Writing: React.FC = () => {
             updatedAt: item.updatedAt || new Date().toISOString()
           }));
           
-          await saveReflectionStepData(sessionId, formattedReflectionItems, selectedHintTags, allGeneratedHints);
+          // Save reflection step data via API
+          const response = await fetch('/api/writing-step/save-reflection', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              sessionId,
+              reflectionItems: formattedReflectionItems,
+              selectedHintTags,
+              allGeneratedHints
+            })
+          });
+          
+          if (!response.ok) {
+            const errorData = await response.json();
+            console.error('Failed to save reflection step data:', errorData);
+          } else {
+            const result = await response.json();
+            console.log('Reflection step data saved successfully:', result);
+          }
         }
       } catch (error) {
         console.error('Error saving reflection step data:', error);
@@ -1546,7 +1757,17 @@ const Writing: React.FC = () => {
             }))
           }));
           
-          await saveSolutionExplorationData(sessionId, solutionsByReflection);
+          // Save solution exploration data via API
+          await fetch('/api/writing-step/save-solution-exploration', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              sessionId,
+              solutionsByReflection
+            })
+          });
         }
       } catch (error) {
         console.error('Error saving solution exploration data:', error);
@@ -1564,7 +1785,17 @@ const Writing: React.FC = () => {
             timestamp: new Date().toISOString()
           }));
           
-          await saveAIStrengthTagsData(sessionId, strengthTagsByReflection);
+          // Save AI strength tags data via API
+          await fetch('/api/writing-step/save-ai-strength-tags', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              sessionId,
+              strengthTagsByReflection
+            })
+          });
         }
       } catch (error) {
         console.error('Error saving AI strength tags data:', error);
@@ -1573,7 +1804,19 @@ const Writing: React.FC = () => {
       // Save magic mix interaction data
       try {
         if (sessionId) {
-          await saveMagicMixInteractionData(sessionId, magicMixInteractions, totalMixCount, totalSolutionsAdded);
+          // Save magic mix interaction data via API
+          await fetch('/api/writing-step/save-magic-mix', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              sessionId,
+              interactions: magicMixInteractions,
+              totalMixCount,
+              totalSolutionsAdded
+            })
+          });
         }
       } catch (error) {
         console.error('Error saving magic mix interaction data:', error);
@@ -1592,14 +1835,19 @@ const Writing: React.FC = () => {
       // Save original generated letter to database
       try {
         if (sessionId) {
-          await saveResponseLetterData(
-            sessionId,
-            result.letter,
-            result.letter, // initially same as original
-            characterName,
-            currentUser?.nickname || '익명의 사용자',
-            new Date().toISOString()
-          );
+          // Save response letter data via API
+          await fetch('/api/writing-step/save-response-letter', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              sessionId,
+              originalGeneratedLetter: result.letter,
+              finalEditedLetter: result.letter, // initially same as original
+              characterName
+            })
+          });
         }
       } catch (error) {
         console.error('Error saving response letter data:', error);
