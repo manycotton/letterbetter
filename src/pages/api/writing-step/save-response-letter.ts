@@ -7,15 +7,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { sessionId, originalGeneratedLetter, finalEditedLetter, characterName } = req.body;
+    const { sessionId, originalGeneratedLetter, finalEditedLetter, characterName, userNickname, generatedAt } = req.body;
 
-    if (!sessionId || !originalGeneratedLetter || !finalEditedLetter || !characterName) {
+    if (!sessionId || !originalGeneratedLetter || !finalEditedLetter || !characterName || !userNickname || !generatedAt) {
       return res.status(400).json({ 
-        message: 'Missing required fields: sessionId, originalGeneratedLetter, finalEditedLetter, characterName' 
+        message: 'Missing required fields: sessionId, originalGeneratedLetter, finalEditedLetter, characterName, userNickname, generatedAt' 
       });
     }
 
-    const responseLetterData = await saveResponseLetterData(sessionId, originalGeneratedLetter, finalEditedLetter, characterName);
+    const responseLetterData = await saveResponseLetterData(sessionId, originalGeneratedLetter, finalEditedLetter, characterName, userNickname, generatedAt);
 
     res.status(200).json({ 
       message: 'Response letter data saved successfully',
