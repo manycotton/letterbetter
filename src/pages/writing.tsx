@@ -906,7 +906,8 @@ const Writing: React.FC = () => {
         body: JSON.stringify({
           characterName,
           highlightedData: highlightData,
-          letterContent: letterParagraphs.join(' ')
+          letterContent: letterParagraphs.join(' '),
+          userId: currentUser?.userId
         }),
       });
 

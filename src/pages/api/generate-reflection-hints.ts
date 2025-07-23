@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import OpenAI from 'openai';
+import { saveReflectionSupportKeywords } from '../../../lib/database';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -11,7 +12,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { characterName, highlightedData, letterContent } = req.body;
+    const { characterName, highlightedData, letterContent, userId } = req.body;
 
     if (!characterName || !highlightedData || !Array.isArray(highlightedData)) {
       return res.status(400).json({ message: 'Required data is missing' });
@@ -105,6 +106,17 @@ ${highlightSummary}
         '자신감 하락',
         '우선순위 설정의 어려움'
       ];
+    }
+
+    // 키워드를 데이터베이스에 저장 (userId가 있는 경우에만)
+    if (userId && hints.length > 0) {
+      try {
+        await saveReflectionSupportKeywords(userId, hints.slice(0, 7));
+        console.log('Keywords saved to database for user:', userId);
+      } catch (saveError) {
+        console.error('Error saving keywords to database:', saveError);
+        // 키워드 저장 실패해도 응답은 성공으로 처리
+      }
     }
 
     res.status(200).json({

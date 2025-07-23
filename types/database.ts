@@ -49,6 +49,14 @@ export interface UnderstandingSession {
   updatedAt: string;
 }
 
+// Reflection Support Keywords 인터페이스
+export interface ReflectionSupportKeywords {
+  id: string;
+  userId: string;
+  keywords: string[];
+  createdAt: string;
+}
+
 // 새로운 StrengthFindingSession 인터페이스
 export interface StrengthFindingSession {
   strengthFindingSessionId: string;

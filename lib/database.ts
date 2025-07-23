@@ -1,5 +1,5 @@
 import redis from './upstash';
-import { User, LetterSession, HighlightedItem, StrengthItem, QuestionAnswers, ReflectionItem, GeneratedLetter, ReflectionHints, StrengthAnalysisLog, WritingStepData, InspectionData, SuggestionData, LetterContentData, SolutionExplorationData, AIStrengthTagsData, MagicMixInteractionData, ResponseLetterData, UnderstandingSession, StrengthFindingSession, CleanHighlightedItem, CleanStrengthItem, Letter } from '../types/database';
+import { User, LetterSession, HighlightedItem, StrengthItem, QuestionAnswers, ReflectionItem, GeneratedLetter, ReflectionHints, StrengthAnalysisLog, WritingStepData, InspectionData, SuggestionData, LetterContentData, SolutionExplorationData, AIStrengthTagsData, MagicMixInteractionData, ResponseLetterData, UnderstandingSession, StrengthFindingSession, CleanHighlightedItem, CleanStrengthItem, Letter, ReflectionSupportKeywords } from '../types/database';
 
 // 안전한 JSON 파싱 헬퍼 함수
 function safeJSONParse<T>(value: string | undefined | null, defaultValue: T): T {
@@ -1665,5 +1665,78 @@ export async function createOrUpdateStrengthFindingSession(sessionId: string, hi
   } catch (error) {
     console.error("Error creating or updating strength finding session:", error);
     throw error;
+  }
+}
+
+// Reflection Support Keywords 관련 함수들
+export async function saveReflectionSupportKeywords(userId: string, newKeywords: string[]): Promise<ReflectionSupportKeywords> {
+  try {
+    // 기존 키워드 데이터 가져오기
+    const existingData = await getReflectionSupportKeywords(userId);
+    
+    if (existingData) {
+      // 기존 데이터가 있으면 키워드 추가 (중복 제거)
+      const allKeywords = [...existingData.keywords, ...newKeywords];
+      const uniqueKeywords = [...new Set(allKeywords)]; // 중복 제거
+      
+      const updatedData: ReflectionSupportKeywords = {
+        ...existingData,
+        keywords: uniqueKeywords
+      };
+      
+      // Hash 데이터 업데이트
+      await redis.hset(existingData.id, {
+        keywords: uniqueKeywords
+      });
+      
+      return updatedData;
+    } else {
+      // 새로운 데이터 생성
+      const keywordId = `reflection_support_keywords:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
+      
+      const keywordData: ReflectionSupportKeywords = {
+        id: keywordId,
+        userId,
+        keywords: newKeywords,
+        createdAt: new Date().toISOString()
+      };
+      
+      // Hash로 저장
+      await redis.hset(keywordId, {
+        id: keywordId,
+        userId,
+        keywords: newKeywords,
+        createdAt: keywordData.createdAt
+      });
+      
+      return keywordData;
+    }
+  } catch (error) {
+    console.error('Error saving reflection support keywords:', error);
+    throw error;
+  }
+}
+
+export async function getReflectionSupportKeywords(userId: string): Promise<ReflectionSupportKeywords | null> {
+  try {
+    // 모든 reflection_support_keywords:* 키들을 찾아서 userId로 필터링
+    const keywordKeys = await redis.keys('reflection_support_keywords:*');
+    
+    for (const keywordKey of keywordKeys) {
+      const keywordData = await redis.hgetall(keywordKey);
+      if (keywordData && keywordData.userId === userId) {
+        return {
+          id: keywordData.id as string,
+          userId: keywordData.userId as string,
+          keywords: Array.isArray(keywordData.keywords) ? keywordData.keywords : safeJSONParse(keywordData.keywords as string, []),
+          createdAt: keywordData.createdAt as string
+        };
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error getting reflection support keywords:', error);
+    return null;
   }
 }
