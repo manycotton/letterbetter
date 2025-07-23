@@ -1675,18 +1675,17 @@ export async function saveReflectionSupportKeywords(userId: string, newKeywords:
     const existingData = await getReflectionSupportKeywords(userId);
     
     if (existingData) {
-      // 기존 데이터가 있으면 키워드 추가 (중복 제거)
-      const allKeywords = [...existingData.keywords, ...newKeywords];
-      const uniqueKeywords = [...new Set(allKeywords)]; // 중복 제거
+      // 기존 데이터가 있으면 새로운 키워드 배열을 추가
+      const updatedKeywords = [...existingData.keywords, newKeywords]; // 2차원 배열에 새 배열 추가
       
       const updatedData: ReflectionSupportKeywords = {
         ...existingData,
-        keywords: uniqueKeywords
+        keywords: updatedKeywords
       };
       
       // Hash 데이터 업데이트
       await redis.hset(existingData.id, {
-        keywords: uniqueKeywords
+        keywords: updatedKeywords
       });
       
       return updatedData;
@@ -1697,7 +1696,7 @@ export async function saveReflectionSupportKeywords(userId: string, newKeywords:
       const keywordData: ReflectionSupportKeywords = {
         id: keywordId,
         userId,
-        keywords: newKeywords,
+        keywords: [newKeywords], // 첫 번째 키워드 배열을 2차원 배열로 감싸기
         createdAt: new Date().toISOString()
       };
       
@@ -1705,7 +1704,7 @@ export async function saveReflectionSupportKeywords(userId: string, newKeywords:
       await redis.hset(keywordId, {
         id: keywordId,
         userId,
-        keywords: newKeywords,
+        keywords: [newKeywords], // 2차원 배열로 저장
         createdAt: keywordData.createdAt
       });
       
@@ -1725,10 +1724,26 @@ export async function getReflectionSupportKeywords(userId: string): Promise<Refl
     for (const keywordKey of keywordKeys) {
       const keywordData = await redis.hgetall(keywordKey);
       if (keywordData && keywordData.userId === userId) {
+        // 2차원 배열 처리
+        let keywords: string[][] = [];
+        if (Array.isArray(keywordData.keywords)) {
+          // 이미 2차원 배열인지 확인
+          if (keywordData.keywords.length > 0 && Array.isArray(keywordData.keywords[0])) {
+            keywords = keywordData.keywords as string[][];
+          } else {
+            // 1차원 배열이면 2차원으로 변환 (기존 데이터 호환성)
+            keywords = [keywordData.keywords as string[]];
+          }
+        } else {
+          // 문자열인 경우 파싱
+          const parsed = safeJSONParse(keywordData.keywords as string, []);
+          keywords = Array.isArray(parsed[0]) ? parsed : [parsed];
+        }
+        
         return {
           id: keywordData.id as string,
           userId: keywordData.userId as string,
-          keywords: Array.isArray(keywordData.keywords) ? keywordData.keywords : safeJSONParse(keywordData.keywords as string, []),
+          keywords: keywords,
           createdAt: keywordData.createdAt as string
         };
       }

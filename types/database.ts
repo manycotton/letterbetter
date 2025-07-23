@@ -53,7 +53,7 @@ export interface UnderstandingSession {
 export interface ReflectionSupportKeywords {
   id: string;
   userId: string;
-  keywords: string[];
+  keywords: string[][]; // 2차원 배열: 각 새로고침마다 별도 배열로 저장
   createdAt: string;
 }
 
