@@ -965,7 +965,19 @@ export async function saveWritingStepData(sessionId: string, stepType: 'understa
         completedAt: new Date().toISOString()
       }));
 
-    await redis.set(`session_${stepType}:${sessionId}`, JSON.stringify(sessionData));
+    // Remove 'session:' prefix from sessionId to avoid duplication
+    const cleanSessionId = sessionId.replace(/^session:/, '');
+    
+    // Store as hash for better structure
+    const hashData = {
+      sessionId,
+      stepType,
+      highlightedItems: JSON.stringify(sessionData),
+      completedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString()
+    };
+    
+    await redis.hset(`session_${stepType}:${cleanSessionId}`, hashData);
     
     return stepData;
   } catch (error) {
@@ -976,11 +988,21 @@ export async function saveWritingStepData(sessionId: string, stepType: 'understa
 
 export async function getWritingStepData(sessionId: string, stepType: 'understanding' | 'strength_finding'): Promise<any[]> {
   try {
-    // Get data directly from session mapping
-    const sessionData = await redis.get(`session_${stepType}:${sessionId}`);
+    // Remove 'session:' prefix from sessionId to avoid duplication
+    const cleanSessionId = sessionId.replace(/^session:/, '');
+    
+    // Try to get from hash first (new format)
+    const hashData = await redis.hgetall(`session_${stepType}:${cleanSessionId}`);
+    if (hashData && Object.keys(hashData).length > 0 && hashData.highlightedItems) {
+      return JSON.parse(hashData.highlightedItems as string);
+    }
+    
+    // Fallback to old string format for backward compatibility
+    const sessionData = await redis.get(`session_${stepType}:${cleanSessionId}`);
     if (sessionData && typeof sessionData === 'string') {
       return JSON.parse(sessionData);
     }
+    
     return [];
   } catch (error) {
     console.error('Error getting writing step data:', error);
@@ -993,7 +1015,14 @@ export async function saveReflectionStepData(sessionId: string, reflectionItems:
   // Legacy 필드 제거
   const cleanedReflectionItems = cleanReflectionItems(reflectionItems);
   
-  // Store reflection items as array directly
+  // Remove 'session:' prefix from sessionId to avoid duplication
+  const cleanSessionId = sessionId.replace(/^session:/, '');
+  
+  // Get existing reflection data to compare for history
+  const existingData = await getReflectionStepData(sessionId);
+  const existingItemsMap = new Map(existingData.map(item => [item.id, item]));
+  
+  // Prepare reflection data array
   const reflectionData = cleanedReflectionItems.map(item => ({
     id: item.id,
     content: item.content,
@@ -1006,20 +1035,63 @@ export async function saveReflectionStepData(sessionId: string, reflectionItems:
     solutionCompleted: item.solutionCompleted || false,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
-    completedAt: new Date().toISOString()
+    completedAt: new Date().toISOString(),
+    inspectionCompletedAt: item.inspectionCompletedAt
   }));
-
-  await redis.set(`session_reflection:${sessionId}`, JSON.stringify(reflectionData));
+  
+  // Get existing history IDs from current session reflection hash
+  const existingHash = await redis.hgetall(`session_reflection:${cleanSessionId}`);
+  let allHistoryIds = [];
+  if (existingHash && existingHash.historyIds) {
+    try {
+      allHistoryIds = JSON.parse(existingHash.historyIds);
+    } catch (e) {
+      console.error('Error parsing existing history IDs:', e);
+    }
+  }
+  
+  // Save history for each item
+  for (const item of reflectionData) {
+    const existingItem = existingItemsMap.get(item.id);
+    if (existingItem) {
+      // Save existing state to history before updating
+      const historyId = await saveReflectionItemHistory(item.id, existingItem, 'update');
+      if (historyId) allHistoryIds.push(historyId);
+    } else {
+      // New item - save creation to history
+      const historyId = await saveReflectionItemHistory(item.id, item, 'create');
+      if (historyId) allHistoryIds.push(historyId);
+    }
+  }
+  
+  // Store reflection data as hash in session_reflection
+  await redis.hset(`session_reflection:${cleanSessionId}`, {
+    reflectionItems: JSON.stringify(reflectionData),
+    selectedHintTags: JSON.stringify(selectedHintTags),
+    allGeneratedHints: JSON.stringify(allGeneratedHints),
+    historyIds: JSON.stringify(allHistoryIds),
+    updatedAt: new Date().toISOString(),
+    createdAt: existingHash?.createdAt || new Date().toISOString()
+  });
   
   return reflectionData;
 }
 
 export async function getReflectionStepData(sessionId: string): Promise<any[]> {
   try {
-    const reflectionData = await redis.get(`session_reflection:${sessionId}`);
-    if (reflectionData && typeof reflectionData === 'string') {
-      return JSON.parse(reflectionData);
+    // Remove 'session:' prefix from sessionId to avoid duplication
+    const cleanSessionId = sessionId.replace(/^session:/, '');
+    
+    const reflectionHash = await redis.hgetall(`session_reflection:${cleanSessionId}`);
+    if (!reflectionHash || Object.keys(reflectionHash).length === 0) {
+      return [];
     }
+    
+    // Parse reflection items from hash
+    if (reflectionHash.reflectionItems) {
+      return JSON.parse(reflectionHash.reflectionItems);
+    }
+    
     return [];
   } catch (error) {
     console.error('Error getting reflection step data:', error);
@@ -1037,57 +1109,380 @@ export async function getAllReflectionStepVersions(sessionId: string): Promise<a
   return getReflectionStepData(sessionId);
 }
 
-// Inspection Data functions - Consolidated with reflection data
+// Get individual reflection item from session data
+export async function getReflectionItem(reflectionId: string, sessionId?: string): Promise<any | null> {
+  try {
+    // If sessionId is provided, get from that session
+    if (sessionId) {
+      const reflectionData = await getReflectionStepData(sessionId);
+      return reflectionData.find(item => item.id === reflectionId) || null;
+    }
+    
+    // Otherwise, search through all sessions (less efficient, but fallback)
+    // First try to find sessionId from reflection history
+    const history = await getReflectionItemHistory(reflectionId);
+    if (history.length > 0) {
+      const sessionIdFromHistory = history[0].data.sessionId;
+      if (sessionIdFromHistory) {
+        const reflectionData = await getReflectionStepData(sessionIdFromHistory);
+        return reflectionData.find(item => item.id === reflectionId) || null;
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error getting reflection item:', error);
+    return null;
+  }
+}
+
+// Update individual reflection item with version history
+export async function updateReflectionItem(reflectionId: string, sessionId: string, updates: Partial<any>): Promise<void> {
+  try {
+    // Remove 'session:' prefix from sessionId to avoid duplication
+    const cleanSessionId = sessionId.replace(/^session:/, '');
+    
+    // Get current reflection hash
+    const reflectionHash = await redis.hgetall(`session_reflection:${cleanSessionId}`);
+    if (!reflectionHash || !reflectionHash.reflectionItems) {
+      throw new Error(`Reflection session ${sessionId} not found`);
+    }
+    
+    const reflectionData = JSON.parse(reflectionHash.reflectionItems);
+    const itemIndex = reflectionData.findIndex((item: any) => item.id === reflectionId);
+    
+    if (itemIndex === -1) {
+      throw new Error(`Reflection item ${reflectionId} not found`);
+    }
+    
+    const existingItem = reflectionData[itemIndex];
+    
+    // Save current state to history before updating
+    const historyId = await saveReflectionItemHistory(reflectionId, existingItem, 'update');
+    
+    // Apply updates
+    const updatedItem = { ...existingItem };
+    if (updates.content !== undefined) updatedItem.content = updates.content;
+    if (updates.keywords !== undefined) updatedItem.keywords = updates.keywords;
+    if (updates.selectedTags !== undefined) updatedItem.selectedTags = updates.selectedTags;
+    if (updates.inspectionStep !== undefined) updatedItem.inspectionStep = updates.inspectionStep;
+    if (updates.emotionCheckResult !== undefined) updatedItem.emotionCheckResult = updates.emotionCheckResult;
+    if (updates.blameCheckResult !== undefined) updatedItem.blameCheckResult = updates.blameCheckResult;
+    if (updates.solutionContent !== undefined) updatedItem.solutionContent = updates.solutionContent;
+    if (updates.solutionCompleted !== undefined) updatedItem.solutionCompleted = updates.solutionCompleted;
+    if (updates.inspectionCompletedAt !== undefined) updatedItem.inspectionCompletedAt = updates.inspectionCompletedAt;
+    
+    updatedItem.updatedAt = new Date().toISOString();
+    
+    // Update the item in the array
+    reflectionData[itemIndex] = updatedItem;
+    
+    // Update history IDs if new history was added
+    let allHistoryIds = [];
+    if (reflectionHash.historyIds) {
+      try {
+        allHistoryIds = JSON.parse(reflectionHash.historyIds);
+      } catch (e) {
+        console.error('Error parsing existing history IDs:', e);
+      }
+    }
+    if (historyId) {
+      allHistoryIds.push(historyId);
+    }
+    
+    // Save updated hash back to Redis
+    await redis.hset(`session_reflection:${cleanSessionId}`, {
+      ...reflectionHash,
+      reflectionItems: JSON.stringify(reflectionData),
+      historyIds: JSON.stringify(allHistoryIds),
+      updatedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error updating reflection item:', error);
+    throw error;
+  }
+}
+
+// Save reflection item history - returns historyId for tracking
+async function saveReflectionItemHistory(reflectionId: string, currentData: any, action: string): Promise<string | null> {
+  try {
+    const timestamp = new Date().toISOString();
+    const historyId = `history:${reflectionId}:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Store history entry as hash
+    await redis.hset(historyId, {
+      reflectionId,
+      timestamp,
+      action,
+      data_id: currentData.id,
+      data_content: currentData.content,
+      data_keywords: JSON.stringify(currentData.keywords || []),
+      data_selectedTags: JSON.stringify(currentData.selectedTags || []),
+      data_inspectionStep: (currentData.inspectionStep || 0).toString(),
+      data_emotionCheckResult: (() => {
+        try {
+          return JSON.stringify(currentData.emotionCheckResult || null);
+        } catch (e) {
+          console.error('Error stringifying emotionCheckResult:', currentData.emotionCheckResult, e);
+          return 'null';
+        }
+      })(),
+      data_blameCheckResult: (() => {
+        try {
+          return JSON.stringify(currentData.blameCheckResult || null);
+        } catch (e) {
+          console.error('Error stringifying blameCheckResult:', currentData.blameCheckResult, e);
+          return 'null';
+        }
+      })(),
+      data_solutionContent: currentData.solutionContent || '',
+      data_solutionCompleted: (currentData.solutionCompleted || false).toString(),
+      data_inspectionCompletedAt: currentData.inspectionCompletedAt || '',
+      data_updatedAt: currentData.updatedAt || '',
+      data_createdAt: currentData.createdAt || '',
+      data_completedAt: currentData.completedAt || ''
+    });
+    
+    return historyId;
+  } catch (error) {
+    console.error('Error saving reflection item history:', error);
+    // Don't throw error here to avoid breaking the main update flow
+    return null;
+  }
+}
+
+// Get reflection item update history
+export async function getReflectionItemHistory(reflectionId: string, sessionId?: string): Promise<any[]> {
+  try {
+    let historyIds = [];
+    
+    if (sessionId) {
+      // Get history IDs from session_reflection hash
+      const cleanSessionId = sessionId.replace(/^session:/, '');
+      const reflectionHash = await redis.hgetall(`session_reflection:${cleanSessionId}`);
+      if (reflectionHash && reflectionHash.historyIds) {
+        try {
+          const allHistoryIds = JSON.parse(reflectionHash.historyIds);
+          // Filter history IDs for this specific reflection item
+          historyIds = allHistoryIds.filter((id: string) => id.includes(`:${reflectionId}:`));
+        } catch (e) {
+          console.error('Error parsing history IDs from session reflection:', e);
+        }
+      }
+    } else {
+      // Fallback: search for history keys matching the reflection ID pattern
+      const historyKeys = await redis.keys(`history:${reflectionId}:*`);
+      historyIds = historyKeys;
+    }
+    
+    if (historyIds.length === 0) {
+      return [];
+    }
+    
+    // Get each history entry
+    const historyEntries = [];
+    for (const historyId of historyIds) {
+      const historyData = await redis.hgetall(historyId);
+      if (historyData && Object.keys(historyData).length > 0) {
+        historyEntries.push({
+          id: historyId,
+          timestamp: historyData.timestamp,
+          action: historyData.action,
+          data: {
+            id: historyData.data_id,
+            content: historyData.data_content,
+            keywords: safeJSONParse(historyData.data_keywords, []),
+            selectedTags: safeJSONParse(historyData.data_selectedTags, []),
+            inspectionStep: parseInt(historyData.data_inspectionStep || '0'),
+            emotionCheckResult: safeJSONParse(historyData.data_emotionCheckResult, null),
+            blameCheckResult: safeJSONParse(historyData.data_blameCheckResult, null),
+            solutionContent: historyData.data_solutionContent || '',
+            solutionCompleted: historyData.data_solutionCompleted === 'true',
+            inspectionCompletedAt: historyData.data_inspectionCompletedAt || '',
+            updatedAt: historyData.data_updatedAt || '',
+            createdAt: historyData.data_createdAt || '',
+            completedAt: historyData.data_completedAt || ''
+          }
+        });
+      }
+    }
+    
+    // Sort by timestamp (newest first)
+    return historyEntries.sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  } catch (error) {
+    console.error('Error getting reflection item history:', error);
+    return [];
+  }
+}
+
+// Get reflection item with its history
+export async function getReflectionItemWithHistory(reflectionId: string, sessionId?: string): Promise<{item: any, history: any[]} | null> {
+  try {
+    const [item, history] = await Promise.all([
+      getReflectionItem(reflectionId, sessionId),
+      getReflectionItemHistory(reflectionId)
+    ]);
+    
+    if (!item) {
+      return null;
+    }
+    
+    return { item, history };
+  } catch (error) {
+    console.error('Error getting reflection item with history:', error);
+    return null;
+  }
+}
+
+// Inspection Data functions - Store inspection results directly in reflection items
+// This function should be called AFTER blameCheckResult prompt has been executed
 export async function saveInspectionData(sessionId: string, inspectionResults: Array<{reflectionId: string; emotionCheck: any; blameCheck: any}>): Promise<InspectionData> {
-  // Get current reflection data and update with inspection results
-  const reflectionData = await getReflectionStepData(sessionId);
+  const completedAt = new Date().toISOString();
   
-  // Update reflection items with inspection results
-  const updatedReflectionData = reflectionData.map(item => {
-    const inspectionResult = inspectionResults.find(result => result.reflectionId === item.id);
-    if (inspectionResult) {
-      return {
-        ...item,
-        emotionCheckResult: inspectionResult.emotionCheck,
-        blameCheckResult: inspectionResult.blameCheck,
-        updatedAt: new Date().toISOString()
+  console.log('saveInspectionData called with:', {
+    sessionId,
+    inspectionResults: inspectionResults.map(r => ({
+      reflectionId: r.reflectionId,
+      emotionCheck: typeof r.emotionCheck,
+      blameCheck: typeof r.blameCheck,
+      emotionCheckValue: r.emotionCheck,
+      blameCheckValue: r.blameCheck
+    }))
+  });
+  
+  // Remove 'session:' prefix from sessionId to avoid duplication
+  const cleanSessionId = sessionId.replace(/^session:/, '');
+  
+  // Get current reflection hash
+  const reflectionHash = await redis.hgetall(`session_reflection:${cleanSessionId}`);
+  if (!reflectionHash || !reflectionHash.reflectionItems) {
+    throw new Error(`Reflection session ${sessionId} not found`);
+  }
+  
+  console.log('Reflection hash from Redis:', {
+    reflectionItems: reflectionHash.reflectionItems,
+    reflectionItemsType: typeof reflectionHash.reflectionItems,
+    historyIds: reflectionHash.historyIds
+  });
+  
+  let reflectionData;
+  try {
+    reflectionData = JSON.parse(reflectionHash.reflectionItems);
+  } catch (parseError) {
+    console.error('Failed to parse reflectionItems:', reflectionHash.reflectionItems);
+    throw new Error(`Invalid JSON in reflectionItems: ${reflectionHash.reflectionItems}`);
+  }
+  let allHistoryIds = [];
+  if (reflectionHash.historyIds) {
+    try {
+      allHistoryIds = JSON.parse(reflectionHash.historyIds);
+    } catch (e) {
+      console.error('Error parsing existing history IDs:', e);
+    }
+  }
+  
+  // Update each reflection item with inspection results
+  for (const inspectionResult of inspectionResults) {
+    const itemIndex = reflectionData.findIndex((item: any) => item.id === inspectionResult.reflectionId);
+    if (itemIndex !== -1) {
+      const existingItem = reflectionData[itemIndex];
+      
+      // Save current state to history before inspection update
+      const historyId = await saveReflectionItemHistory(inspectionResult.reflectionId, existingItem, 'inspection');
+      if (historyId) {
+        allHistoryIds.push(historyId);
+      }
+      
+      // Update the item with inspection results (including blameCheckResult)
+      // Ensure we properly handle the inspection results which might already be objects
+      const emotionCheck = typeof inspectionResult.emotionCheck === 'string' 
+        ? JSON.parse(inspectionResult.emotionCheck) 
+        : inspectionResult.emotionCheck;
+      const blameCheck = typeof inspectionResult.blameCheck === 'string' 
+        ? JSON.parse(inspectionResult.blameCheck) 
+        : inspectionResult.blameCheck;
+        
+      reflectionData[itemIndex] = {
+        ...existingItem,
+        emotionCheckResult: emotionCheck,
+        blameCheckResult: blameCheck,
+        inspectionCompletedAt: completedAt,
+        updatedAt: completedAt
       };
     }
-    return item;
+  }
+  
+  // Save updated reflection hash back to Redis
+  await redis.hset(`session_reflection:${cleanSessionId}`, {
+    ...reflectionHash,
+    reflectionItems: JSON.stringify(reflectionData),
+    historyIds: JSON.stringify(allHistoryIds),
+    updatedAt: completedAt
   });
+  
+  // Create the final inspection results with properly formatted data
+  const formattedInspectionResults = inspectionResults.map(result => ({
+    reflectionId: result.reflectionId,
+    emotionCheck: typeof result.emotionCheck === 'string' 
+      ? JSON.parse(result.emotionCheck) 
+      : result.emotionCheck,
+    blameCheck: typeof result.blameCheck === 'string' 
+      ? JSON.parse(result.blameCheck) 
+      : result.blameCheck
+  }));
 
-  // Store updated reflection data with inspection results
-  await redis.hset(`session_inspection:${sessionId}`, {
-    inspectionResults: JSON.stringify(inspectionResults),
-    completedAt: new Date().toISOString(),
-    createdAt: new Date().toISOString()
-  });
-  
-  // Also update the reflection data
-  await redis.set(`session_reflection:${sessionId}`, JSON.stringify(updatedReflectionData));
-  
   return {
-    id: `session_inspection:${sessionId}`,
+    id: `inspection_${sessionId}_${Date.now()}`,
     sessionId,
-    inspectionResults,
-    completedAt: new Date().toISOString(),
-    createdAt: new Date().toISOString()
+    inspectionResults: formattedInspectionResults,
+    completedAt,
+    createdAt: completedAt
   };
 }
 
 export async function getInspectionData(sessionId: string): Promise<InspectionData | null> {
   try {
-    const inspectionHash = await redis.hgetall(`session_inspection:${sessionId}`);
-    if (!inspectionHash || Object.keys(inspectionHash).length === 0) return null;
+    // Get reflection items for this session
+    const reflectionItems = await getReflectionStepData(sessionId);
+    if (!reflectionItems || reflectionItems.length === 0) {
+      return null;
+    }
     
-    const inspectionResults = inspectionHash.inspectionResults ? JSON.parse(inspectionHash.inspectionResults as string) : [];
+    // Extract inspection results from reflection items
+    const inspectionResults = [];
+    let latestCompletedAt = '';
+    let earliestCreatedAt = '';
+    
+    for (const item of reflectionItems) {
+      if (item.emotionCheckResult || item.blameCheckResult) {
+        inspectionResults.push({
+          reflectionId: item.id,
+          emotionCheck: item.emotionCheckResult,
+          blameCheck: item.blameCheckResult
+        });
+        
+        // Track completion times
+        if (item.inspectionCompletedAt) {
+          if (!latestCompletedAt || item.inspectionCompletedAt > latestCompletedAt) {
+            latestCompletedAt = item.inspectionCompletedAt;
+          }
+          if (!earliestCreatedAt || item.inspectionCompletedAt < earliestCreatedAt) {
+            earliestCreatedAt = item.inspectionCompletedAt;
+          }
+        }
+      }
+    }
+    
+    if (inspectionResults.length === 0) {
+      return null;
+    }
     
     return {
-      id: `session_inspection:${sessionId}`,
+      id: `inspection_${sessionId}_composite`,
       sessionId,
       inspectionResults,
-      completedAt: inspectionHash.completedAt as string || '',
-      createdAt: inspectionHash.createdAt as string || ''
+      completedAt: latestCompletedAt,
+      createdAt: earliestCreatedAt || latestCompletedAt
     };
   } catch (error) {
     console.error('Error getting inspection data:', error);

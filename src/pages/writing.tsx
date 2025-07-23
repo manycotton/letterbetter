@@ -1002,6 +1002,17 @@ const Writing: React.FC = () => {
             emotionCheck: emotionResult,
             blameCheck: blameResult
           }];
+          
+          // Debug log to check data before sending
+          console.log('About to send inspection data:', {
+            sessionId,
+            inspectionResults,
+            emotionResultType: typeof emotionResult,
+            blameResultType: typeof blameResult,
+            emotionResult,
+            blameResult
+          });
+          
           // Save inspection data via API
           const inspectionResponse = await fetch('/api/writing-step/save-inspection', {
             method: 'POST',
@@ -1182,6 +1193,13 @@ const Writing: React.FC = () => {
 
   // 환경적 요인 재추천 함수
   const regenerateEnvironmentalFactors = async (itemId: string) => {
+    // 현재 아이템 찾기
+    const currentItem = reflectionItems.find(item => item.id === itemId);
+    if (!currentItem) return;
+
+    // 현재 blameWarningExpanded 상태 저장
+    const wasExpanded = currentItem.blameWarningExpanded;
+
     // 로딩 상태 추가 (blameCheckResult에 isRegenerating 플래그)
     setReflectionItems(prev => prev.map(item => 
       item.id === itemId && item.blameCheckResult
@@ -1195,21 +1213,83 @@ const Writing: React.FC = () => {
         : item
     ));
 
-    // 비난 패턴 검사를 다시 실행
-    await checkBlamePatternAndReturn(itemId);
+    // 현재 아이템의 상태를 히스토리에 저장하기 전에 백업
+    if (currentItem && sessionId) {
+      try {
+        // environmental factors 업데이트 전 상태를 히스토리에 저장
+        const selectedHintTags = reflectionItems.map(item => ({
+          reflectionId: item.id,
+          tags: item.selectedTags || []
+        }));
+        const allGeneratedHints = reflectionHints;
+        
+        await fetch('/api/writing-step/save-reflection', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sessionId,
+            reflectionItems: reflectionItems,
+            selectedHintTags: selectedHintTags,
+            allGeneratedHints: allGeneratedHints
+          }),
+        });
+        
+        console.log('History saved before environmental factors regeneration');
+      } catch (error) {
+        console.error('Error saving history before environmental factors update:', error);
+      }
+    }
 
-    // 로딩 상태 제거
-    setReflectionItems(prev => prev.map(item => 
-      item.id === itemId && item.blameCheckResult
-        ? { 
-            ...item, 
-            blameCheckResult: { 
-              ...item.blameCheckResult, 
-              isRegenerating: false 
-            } 
-          }
-        : item
-    ));
+    // 비난 패턴 검사를 다시 실행
+    const newBlameResult = await checkBlamePatternAndReturn(itemId);
+
+    // environmental factors 업데이트 후 상태 업데이트 (expanded 상태 유지)
+    setReflectionItems(prev => {
+      const updatedItems = prev.map(item => 
+        item.id === itemId
+          ? { 
+              ...item, 
+              blameCheckResult: newBlameResult ? {
+                ...newBlameResult,
+                isRegenerating: false
+              } : item.blameCheckResult,
+              blameWarningExpanded: wasExpanded // 기존 expanded 상태 유지
+            }
+          : item
+      );
+
+      // 상태 업데이트와 동시에 히스토리 저장 (업데이트된 상태 사용)
+      setTimeout(async () => {
+        try {
+          const selectedHintTags = updatedItems.map(item => ({
+            reflectionId: item.id,
+            tags: item.selectedTags || []
+          }));
+          const allGeneratedHints = reflectionHints;
+          
+          await fetch('/api/writing-step/save-reflection', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              sessionId,
+              reflectionItems: updatedItems, // 업데이트된 상태 사용
+              selectedHintTags,
+              allGeneratedHints
+            }),
+          });
+          
+          console.log('Reflection saved after environmental factors regeneration');
+        } catch (error) {
+          console.error('Error saving reflection after environmental factors update:', error);
+        }
+      }, 100);
+
+      return updatedItems;
+    });
   };
 
   // Step 3: 해결책 입력 핸들러
@@ -2343,7 +2423,7 @@ const Writing: React.FC = () => {
                             <div className={styles.suggestionHeader}>
                               <span className={styles.suggestionIcon}>💭</span>
                               <h5 className={styles.suggestionTitle}>
-                                {item.emotionCheckResult.situationSummary || "이 상황"}에서 양양은 어떤 감정을 느꼈을지도 추가해볼까요?
+                                {item.emotionCheckResult.situationSummary || "이 상황"}에서 {characterName}은 어떤 감정을 느꼈을지도 추가해볼까요?
                               </h5>
                             </div>
                           </div>

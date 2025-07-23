@@ -30,7 +30,7 @@ JSON 형태로 다음과 같이 응답해주세요:
         'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
+        model: 'gpt-4o',
         messages: [
           {
             role: 'system',
