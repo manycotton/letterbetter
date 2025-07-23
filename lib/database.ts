@@ -1,5 +1,5 @@
 import redis from './upstash';
-import { User, LetterSession, HighlightedItem, StrengthItem, QuestionAnswers, ReflectionItem, GeneratedLetter, ReflectionHints, StrengthAnalysisLog, WritingStepData, ReflectionStepData, InspectionData, SuggestionData, LetterContentData, SolutionExplorationData, AIStrengthTagsData, MagicMixInteractionData, ResponseLetterData, UnderstandingSession, StrengthFindingSession, CleanHighlightedItem, CleanStrengthItem } from '../types/database';
+import { User, LetterSession, HighlightedItem, StrengthItem, QuestionAnswers, ReflectionItem, GeneratedLetter, ReflectionHints, StrengthAnalysisLog, WritingStepData, ReflectionStepData, InspectionData, SuggestionData, LetterContentData, SolutionExplorationData, AIStrengthTagsData, MagicMixInteractionData, ResponseLetterData, UnderstandingSession, StrengthFindingSession, CleanHighlightedItem, CleanStrengthItem, Letter } from '../types/database';
 
 // User 관련 함수들 - Redis Hash 사용
 export async function createUser(nickname: string, password: string, userIntroduction: string, userStrength: any, userChallenge: any): Promise<User> {
@@ -46,13 +46,13 @@ export async function getUserByNickname(nickname: string): Promise<User | null> 
           
           // Hash 데이터를 User 객체로 변환
           const user: User = {
-            userId: userData.userId,
-            nickname: userData.nickname,
-            password: userData.password,
-            userIntroduction: userData.userIntroduction || "",
+            userId: userData.userId as string,
+            nickname: userData.nickname as string,
+            password: userData.password as string,
+            userIntroduction: (userData.userIntroduction as string) || "",
             userStrength: userData.userStrength ? (typeof userData.userStrength === 'string' ? JSON.parse(userData.userStrength) : userData.userStrength) : { generalStrength: "", keywordBasedStrength: [] },
             userChallenge: userData.userChallenge ? (typeof userData.userChallenge === 'string' ? JSON.parse(userData.userChallenge) : userData.userChallenge) : { context: "", challenge: "" },
-            createdAt: userData.createdAt
+            createdAt: userData.createdAt as string
           };
           
           return user;
@@ -75,7 +75,7 @@ export async function validateUser(nickname: string, password: string): Promise<
   return user;
 }
 
-// Letter Session 관련 함수들
+// Letter Session 관련 함수들 - 이제 letter에 직접 세션 데이터 저장
 export async function createLetterSession(userId: string, highlightedItems: HighlightedItem[], strengthItems?: StrengthItem[], letterId?: string): Promise<LetterSession> {
   const sessionId = `session:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
   
@@ -90,20 +90,23 @@ export async function createLetterSession(userId: string, highlightedItems: High
     updatedAt: new Date().toISOString(),
   };
 
-  await redis.set(sessionId, JSON.stringify(session));
-  
-  // 사용자별 세션 목록에 추가
-  await redis.lpush(`user_sessions:${userId}`, sessionId);
-  
-  // letterId가 있는 경우 편지별 세션 연결 추가
+  // letterId가 있으면 letter에 세션 데이터 직접 저장
   if (letterId) {
-    await redis.set(`letter_session:${letterId}`, sessionId);
-    
-    // letterId로 시작하는 경우 편지별 세션으로도 설정
-    if (letterId.startsWith('letter:')) {
-      await redis.set(`letter_session_by_id:${letterId}`, sessionId);
-    }
+    await redis.hset(letterId, {
+      sessionId: sessionId,
+      highlightedItems: JSON.stringify(highlightedItems),
+      strengthItems: JSON.stringify(strengthItems || []),
+      reflectionItems: JSON.stringify([]),
+      currentStep: "1",
+      sessionCreatedAt: session.createdAt,
+      sessionUpdatedAt: session.updatedAt
+    });
+  } else {
+    // letterId가 없으면 기존 방식으로 별도 저장 (호환성)
+    await redis.set(sessionId, JSON.stringify(session));
   }
+  
+  // Note: user_sessions 제거 - letter에서 직접 관리
   
   return session;
 }
@@ -161,7 +164,29 @@ function cleanReflectionItems(items: any[]): ReflectionItem[] {
   return items.map(cleanReflectionItem);
 }
 
-export async function updateLetterSession(sessionId: string, highlightedItems: HighlightedItem[], strengthItems?: StrengthItem[], reflectionItems?: ReflectionItem[], currentStep?: number): Promise<void> {
+export async function updateLetterSession(sessionId: string, highlightedItems: HighlightedItem[], strengthItems?: StrengthItem[], reflectionItems?: ReflectionItem[], currentStep?: number, letterId?: string): Promise<void> {
+  // letterId가 있으면 letter에서 직접 업데이트
+  if (letterId) {
+    const updateData: any = {
+      highlightedItems: JSON.stringify(highlightedItems),
+      sessionUpdatedAt: new Date().toISOString()
+    };
+    
+    if (strengthItems !== undefined) {
+      updateData.strengthItems = JSON.stringify(strengthItems);
+    }
+    if (reflectionItems !== undefined) {
+      updateData.reflectionItems = JSON.stringify(reflectionItems);
+    }
+    if (currentStep !== undefined) {
+      updateData.currentStep = currentStep.toString();
+    }
+    
+    await redis.hset(letterId, updateData);
+    return;
+  }
+  
+  // Fallback: 기존 방식
   const sessionData = await redis.get(sessionId);
   if (!sessionData) throw new Error('Session not found');
   
@@ -187,7 +212,25 @@ export async function updateLetterSession(sessionId: string, highlightedItems: H
   await redis.set(sessionId, JSON.stringify(session));
 }
 
-export async function getLetterSession(sessionId: string): Promise<LetterSession | null> {
+export async function getLetterSession(sessionId: string, letterId?: string): Promise<LetterSession | null> {
+  // letterId가 있으면 letter에서 세션 데이터 조회
+  if (letterId) {
+    const letterData = await redis.hgetall(letterId);
+    if (letterData && Object.keys(letterData).length > 0 && letterData.sessionId === sessionId) {
+      return {
+        id: sessionId,
+        userId: letterData.userId as string,
+        highlightedItems: letterData.highlightedItems ? JSON.parse(letterData.highlightedItems as string) : [],
+        strengthItems: letterData.strengthItems ? JSON.parse(letterData.strengthItems as string) : [],
+        reflectionItems: letterData.reflectionItems ? JSON.parse(letterData.reflectionItems as string) : [],
+        currentStep: letterData.currentStep ? parseInt(letterData.currentStep as string) : 1,
+        createdAt: letterData.sessionCreatedAt as string || letterData.createdAt as string,
+        updatedAt: letterData.sessionUpdatedAt as string || letterData.createdAt as string
+      };
+    }
+  }
+  
+  // Fallback: 기존 방식
   const sessionData = await redis.get(sessionId);
   if (!sessionData) return null;
   
@@ -199,18 +242,24 @@ export async function getLetterSession(sessionId: string): Promise<LetterSession
 }
 
 export async function getUserSessions(userId: string): Promise<LetterSession[]> {
-  const sessionIds = await redis.lrange(`user_sessions:${userId}`, 0, -1);
-  if (!sessionIds || sessionIds.length === 0) return [];
-  
+  // 이제 letter에서 세션 데이터를 가져옴
+  const letterKeys = await redis.keys('letter:*');
   const sessions: LetterSession[] = [];
-  for (const sessionId of sessionIds) {
-    const sessionData = await redis.get(sessionId as string);
-    if (sessionData) {
-      if (typeof sessionData === 'object') {
-        sessions.push(sessionData as LetterSession);
-      } else {
-        sessions.push(JSON.parse(sessionData as string) as LetterSession);
-      }
+  
+  for (const letterKey of letterKeys) {
+    const letterData = await redis.hgetall(letterKey);
+    if (letterData && Object.keys(letterData).length > 0 && letterData.userId === userId && letterData.sessionId) {
+      const session: LetterSession = {
+        id: letterData.sessionId as string,
+        userId: letterData.userId as string,
+        highlightedItems: letterData.highlightedItems ? JSON.parse(letterData.highlightedItems as string) : [],
+        strengthItems: letterData.strengthItems ? JSON.parse(letterData.strengthItems as string) : [],
+        reflectionItems: letterData.reflectionItems ? JSON.parse(letterData.reflectionItems as string) : [],
+        currentStep: letterData.currentStep ? parseInt(letterData.currentStep as string) : 1,
+        createdAt: letterData.sessionCreatedAt as string || letterData.createdAt as string,
+        updatedAt: letterData.sessionUpdatedAt as string || letterData.createdAt as string
+      };
+      sessions.push(session);
     }
   }
   
@@ -218,20 +267,34 @@ export async function getUserSessions(userId: string): Promise<LetterSession[]> 
 }
 
 export async function deleteLetterSession(sessionId: string, userId: string): Promise<void> {
+  // 이제 letter에서 sessionId를 찾아서 해당 letter의 세션 데이터만 제거
+  const letterKeys = await redis.keys('letter:*');
+  
+  for (const letterKey of letterKeys) {
+    const letterData = await redis.hgetall(letterKey);
+    if (letterData && letterData.sessionId === sessionId && letterData.userId === userId) {
+      // 세션 관련 필드들을 제거
+      await redis.hdel(letterKey, 'sessionId', 'highlightedItems', 'strengthItems', 'reflectionItems', 'currentStep', 'sessionCreatedAt', 'sessionUpdatedAt');
+      break;
+    }
+  }
+  
+  // Legacy session 데이터도 제거
   await redis.del(sessionId);
-  await redis.lrem(`user_sessions:${userId}`, 1, sessionId);
 }
 
-// 편지별 세션 조회 함수
+// 편지별 세션 조회 함수 - 이제 letter에서 직접 조회
 export async function getLetterSessionId(letterId: string): Promise<string | null> {
-  const sessionId = await redis.get(`letter_session:${letterId}`);
-  return sessionId as string | null;
+  const letterData = await redis.hgetall(letterId);
+  if (letterData && Object.keys(letterData).length > 0) {
+    return letterData.sessionId as string || null;
+  }
+  return null;
 }
 
 // letterId로 세션 조회 함수
 export async function getLetterSessionByLetterId(letterId: string): Promise<string | null> {
-  const sessionId = await redis.get(`letter_session_by_id:${letterId}`);
-  return sessionId as string | null;
+  return getLetterSessionId(letterId);
 }
 
 // Question Answers 관련 함수들 - 이제 User 객체에 직접 저장 (Hash 사용)
@@ -248,13 +311,13 @@ export async function saveQuestionAnswers(userId: string, answers: string[]): Pr
   let user: User;
   try {
     user = {
-      userId: userData.userId,
-      nickname: userData.nickname,
-      password: userData.password,
-      userIntroduction: userData.userIntroduction || "",
+      userId: userData.userId as string,
+      nickname: userData.nickname as string,
+      password: userData.password as string,
+      userIntroduction: (userData.userIntroduction as string) || "",
       userStrength: userData.userStrength ? (typeof userData.userStrength === 'string' ? JSON.parse(userData.userStrength) : userData.userStrength) : { generalStrength: "", keywordBasedStrength: [] },
       userChallenge: userData.userChallenge ? (typeof userData.userChallenge === 'string' ? JSON.parse(userData.userChallenge) : userData.userChallenge) : { context: "", challenge: "" },
-      createdAt: userData.createdAt
+      createdAt: userData.createdAt as string
     };
     
     console.log('Parsed user:', user);
@@ -364,13 +427,13 @@ async function updateUserDataFromAnswers(userId: string, answers: string[]): Pro
   let user: User;
   try {
     user = {
-      userId: userData.userId,
-      nickname: userData.nickname,
-      password: userData.password,
-      userIntroduction: userData.userIntroduction || "",
+      userId: userData.userId as string,
+      nickname: userData.nickname as string,
+      password: userData.password as string,
+      userIntroduction: (userData.userIntroduction as string) || "",
       userStrength: userData.userStrength ? (typeof userData.userStrength === 'string' ? JSON.parse(userData.userStrength) : userData.userStrength) : { generalStrength: "", keywordBasedStrength: [] },
       userChallenge: userData.userChallenge ? (typeof userData.userChallenge === 'string' ? JSON.parse(userData.userChallenge) : userData.userChallenge) : { context: "", challenge: "" },
-      createdAt: userData.createdAt
+      createdAt: userData.createdAt as string
     };
   } catch (error) {
     console.error('Error parsing user data:', error);
@@ -441,13 +504,13 @@ export async function getUserQuestionAnswers(userId: string): Promise<QuestionAn
     if (!userData || Object.keys(userData).length === 0) return [];
     
     const user: User = {
-      userId: userData.userId,
-      nickname: userData.nickname,
-      password: userData.password,
-      userIntroduction: userData.userIntroduction || "",
+      userId: userData.userId as string,
+      nickname: userData.nickname as string,
+      password: userData.password as string,
+      userIntroduction: (userData.userIntroduction as string) || "",
       userStrength: userData.userStrength ? (typeof userData.userStrength === 'string' ? JSON.parse(userData.userStrength) : userData.userStrength) : { generalStrength: "", keywordBasedStrength: [] },
       userChallenge: userData.userChallenge ? (typeof userData.userChallenge === 'string' ? JSON.parse(userData.userChallenge) : userData.userChallenge) : { context: "", challenge: "" },
-      createdAt: userData.createdAt
+      createdAt: userData.createdAt as string
     };
   
   // Convert user data back to QuestionAnswers format for compatibility
@@ -495,7 +558,13 @@ export async function saveStrengthAnalysisLog(
     createdAt: new Date().toISOString()
   };
 
-  await redis.set(logId, JSON.stringify(strengthLog));
+  await redis.hset(logId, {
+    id: logId,
+    userId,
+    userStrengthsAnalysis: JSON.stringify(userStrengthsAnalysis),
+    selectedStrengthsForLetter: JSON.stringify(selectedStrengthsForLetter),
+    createdAt: strengthLog.createdAt
+  });
   
   return strengthLog;
 }
@@ -507,16 +576,17 @@ export async function getStrengthAnalysisLog(userId: string): Promise<StrengthAn
   const userLogs: {log: StrengthAnalysisLog, timestamp: number}[] = [];
   
   for (const logKey of logKeys) {
-    const logData = await redis.get(logKey);
-    if (logData) {
-      let log: StrengthAnalysisLog;
-      if (typeof logData === 'object') {
-        log = logData as StrengthAnalysisLog;
-      } else {
-        log = JSON.parse(logData as string) as StrengthAnalysisLog;
-      }
-      
-      if (log.userId === userId) {
+    const logData = await redis.hgetall(logKey);
+    if (logData && Object.keys(logData).length > 0) {
+      if (logData.userId === userId) {
+        const log: StrengthAnalysisLog = {
+          id: logData.id as string,
+          userId: logData.userId as string,
+          userStrengthsAnalysis: logData.userStrengthsAnalysis ? JSON.parse(logData.userStrengthsAnalysis as string) : {},
+          selectedStrengthsForLetter: logData.selectedStrengthsForLetter ? JSON.parse(logData.selectedStrengthsForLetter as string) : [],
+          createdAt: logData.createdAt as string
+        };
+        
         // logId에서 타임스탬프 추출 (strength_log:1753229128100:hm3kj3ow4 형식)
         const timestamp = parseInt(logKey.split(':')[1]);
         userLogs.push({log, timestamp});
@@ -569,21 +639,43 @@ export async function saveLetter(
     solutionSessionId: sessionIds.solutionSessionId
   };
 
-  // 편지 저장
-  await redis.set(letterId, JSON.stringify(letter));
+  // 편지를 Hash로 저장
+  await redis.hset(letterId, {
+    letterId,
+    userId,
+    characterName: letterData.characterName,
+    age: letterData.age.toString(),
+    occupation: letterData.occupation,
+    letterContent: JSON.stringify(letterData.letterContent),
+    usedStrengths: JSON.stringify(letterData.usedStrengths),
+    createdAt: letter.createdAt,
+    understandingSessionId: sessionIds.understandingSessionId,
+    strengthFindingSessionId: sessionIds.strengthFindingSessionId,
+    reflectionSessionId: sessionIds.reflectionSessionId,
+    solutionSessionId: sessionIds.solutionSessionId
+  });
   
   return letter;
 }
 
 export async function getLetter(letterId: string): Promise<Letter | null> {
-  const letterData = await redis.get(letterId);
-  if (!letterData) return null;
+  const letterData = await redis.hgetall(letterId);
+  if (!letterData || Object.keys(letterData).length === 0) return null;
   
-  if (typeof letterData === 'object') {
-    return letterData as Letter;
-  }
-  
-  return JSON.parse(letterData as string) as Letter;
+  return {
+    letterId: letterData.letterId as string,
+    userId: letterData.userId as string,
+    characterName: letterData.characterName as string,
+    age: parseInt(letterData.age as string),
+    occupation: letterData.occupation as string,
+    letterContent: letterData.letterContent ? JSON.parse(letterData.letterContent as string) : [],
+    usedStrengths: letterData.usedStrengths ? JSON.parse(letterData.usedStrengths as string) : [],
+    createdAt: letterData.createdAt as string,
+    understandingSessionId: letterData.understandingSessionId as string,
+    strengthFindingSessionId: letterData.strengthFindingSessionId as string,
+    reflectionSessionId: letterData.reflectionSessionId as string,
+    solutionSessionId: letterData.solutionSessionId as string
+  };
 }
 
 export async function getUserLetters(userId: string): Promise<Letter[]> {
@@ -602,7 +694,7 @@ export async function getUserLetters(userId: string): Promise<Letter[]> {
 }
 
 // Legacy - Generated Letter 관련 함수들 (기존 코드 호환성을 위해 유지)
-export async function saveGeneratedLetter(userId: string, letterData: any, strengthAnalysisLogId?: string): Promise<GeneratedLetter> {
+export async function saveGeneratedLetter(userId: string, letterData: any, strengthAnalysisLogId?: string, sessionData?: any): Promise<GeneratedLetter> {
   const letterId = `letter:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
   
   const letterRecord: GeneratedLetter = {
@@ -618,8 +710,31 @@ export async function saveGeneratedLetter(userId: string, letterData: any, stren
     updatedAt: new Date().toISOString()
   };
 
-  // 편지 자체를 letterId로 저장
-  await redis.set(letterId, JSON.stringify(letterRecord));
+  // 편지를 Hash로 저장 (세션 데이터 포함)
+  const hashData: any = {
+    id: letterId,
+    userId,
+    characterName: letterData.characterName,
+    age: letterData.age.toString(),
+    occupation: letterData.occupation,
+    letterContent: JSON.stringify(letterData.letterContent),
+    usedStrengths: JSON.stringify(letterData.usedStrengths),
+    strengthAnalysisLogId: strengthAnalysisLogId || "",
+    createdAt: letterRecord.createdAt,
+    updatedAt: letterRecord.updatedAt
+  };
+
+  // 세션 데이터가 있으면 포함
+  if (sessionData) {
+    hashData.highlightedItems = JSON.stringify(sessionData.highlightedItems || []);
+    hashData.strengthItems = JSON.stringify(sessionData.strengthItems || []);
+    hashData.reflectionItems = JSON.stringify(sessionData.reflectionItems || []);
+    hashData.currentStep = (sessionData.currentStep || 1).toString();
+    hashData.sessionCreatedAt = sessionData.createdAt || letterRecord.createdAt;
+    hashData.sessionUpdatedAt = sessionData.updatedAt || letterRecord.updatedAt;
+  }
+
+  await redis.hset(letterId, hashData);
   
   return letterRecord;
 }
@@ -631,16 +746,22 @@ export async function getGeneratedLetter(userId: string): Promise<GeneratedLette
   const userLetters: {letter: GeneratedLetter, timestamp: number}[] = [];
   
   for (const letterKey of letterKeys) {
-    const letterData = await redis.get(letterKey);
-    if (letterData) {
-      let letter: GeneratedLetter;
-      if (typeof letterData === 'object') {
-        letter = letterData as GeneratedLetter;
-      } else {
-        letter = JSON.parse(letterData as string) as GeneratedLetter;
-      }
-      
-      if (letter.userId === userId) {
+    const letterData = await redis.hgetall(letterKey);
+    if (letterData && Object.keys(letterData).length > 0) {
+      if (letterData.userId === userId) {
+        const letter: GeneratedLetter = {
+          id: letterData.id as string,
+          userId: letterData.userId as string,
+          characterName: letterData.characterName as string,
+          age: parseInt(letterData.age as string),
+          occupation: letterData.occupation as string,
+          letterContent: letterData.letterContent ? JSON.parse(letterData.letterContent as string) : [],
+          usedStrengths: letterData.usedStrengths ? JSON.parse(letterData.usedStrengths as string) : [],
+          strengthAnalysisLogId: (letterData.strengthAnalysisLogId as string) || undefined,
+          createdAt: letterData.createdAt as string,
+          updatedAt: letterData.updatedAt as string
+        };
+        
         // letterId에서 타임스탬프 추출 (letter:1753229183745:5qb2dsbhe 형식)
         const timestamp = parseInt(letterKey.split(':')[1]);
         userLetters.push({letter, timestamp});
@@ -661,16 +782,22 @@ export async function getAllGeneratedLetters(userId: string): Promise<GeneratedL
   const letters: GeneratedLetter[] = [];
   
   for (const letterKey of letterKeys) {
-    const letterData = await redis.get(letterKey);
-    if (letterData) {
-      let letter: GeneratedLetter;
-      if (typeof letterData === 'object') {
-        letter = letterData as GeneratedLetter;
-      } else {
-        letter = JSON.parse(letterData as string) as GeneratedLetter;
-      }
-      
-      if (letter.userId === userId) {
+    const letterData = await redis.hgetall(letterKey);
+    if (letterData && Object.keys(letterData).length > 0) {
+      if (letterData.userId === userId) {
+        const letter: GeneratedLetter = {
+          id: letterData.id as string,
+          userId: letterData.userId as string,
+          characterName: letterData.characterName as string,
+          age: parseInt(letterData.age as string),
+          occupation: letterData.occupation as string,
+          letterContent: letterData.letterContent ? JSON.parse(letterData.letterContent as string) : [],
+          usedStrengths: letterData.usedStrengths ? JSON.parse(letterData.usedStrengths as string) : [],
+          strengthAnalysisLogId: (letterData.strengthAnalysisLogId as string) || undefined,
+          createdAt: letterData.createdAt as string,
+          updatedAt: letterData.updatedAt as string
+        };
+        
         letters.push(letter);
       }
     }
@@ -730,11 +857,9 @@ export async function updateReflectionHints(hintsId: string, generatedHints: str
   await redis.set(hintsId, JSON.stringify(hints));
 }
 
-// Writing Step Data functions
+// Writing Step Data functions - Now saves to letter directly
 export async function saveWritingStepData(sessionId: string, stepType: 'understanding' | 'strength_finding', highlightedItems: HighlightedItem[], userAnswers: {itemId: string; answers: {question: string; answer: string}[]; timestamp: string}[], letterId?: string): Promise<WritingStepData> {
   try {
-    const stepDataId = `writing_step:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
-    
     // Create a clean version of highlighted items with only the necessary fields
     const cleanHighlightedItems: HighlightedItem[] = highlightedItems.map(item => ({
       id: item.id,
@@ -743,8 +868,8 @@ export async function saveWritingStepData(sessionId: string, stepType: 'understa
       paragraphIndex: item.paragraphIndex
     }));
     
-    const stepData: WritingStepData & { letterId?: string } = {
-      id: stepDataId,
+    const stepData: WritingStepData = {
+      id: `${stepType}_step:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`,
       sessionId,
       stepType,
       highlightedItems: cleanHighlightedItems,
@@ -753,13 +878,26 @@ export async function saveWritingStepData(sessionId: string, stepType: 'understa
       createdAt: new Date().toISOString()
     };
     
-    // Add letterId if provided
+    // If letterId is provided, add the step data directly to the letter
     if (letterId) {
-      stepData.letterId = letterId;
+      const letterData = await redis.hgetall(letterId);
+      if (letterData && Object.keys(letterData).length > 0) {
+        // Add step data to letter based on stepType
+        const stepFieldName = stepType === 'understanding' ? 'understandingStep' : 'strengthFindingStep';
+        const stepData = {
+          highlightedItems: cleanHighlightedItems,
+          userAnswers,
+          completedAt: new Date().toISOString()
+        };
+        
+        await redis.hset(letterId, {
+          [stepFieldName]: JSON.stringify(stepData)
+        });
+      }
     }
-
-    await redis.set(stepDataId, JSON.stringify(stepData));
-    await redis.set(`session_${stepType}:${sessionId}`, stepDataId);
+    
+    // Keep session mapping for backward compatibility
+    await redis.set(`session_${stepType}:${sessionId}`, stepData.id);
     
     return stepData;
   } catch (error) {
@@ -769,6 +907,28 @@ export async function saveWritingStepData(sessionId: string, stepType: 'understa
 }
 
 export async function getWritingStepData(sessionId: string, stepType: 'understanding' | 'strength_finding'): Promise<WritingStepData | null> {
+  // Find letter by sessionId
+  const letterKeys = await redis.keys('letter:*');
+  for (const letterKey of letterKeys) {
+    const letterData = await redis.hgetall(letterKey);
+    if (letterData && Object.keys(letterData).length > 0 && letterData.sessionId === sessionId) {
+      const stepFieldName = stepType === 'understanding' ? 'understandingStep' : 'strengthFindingStep';
+      if (letterData[stepFieldName]) {
+        const stepData = JSON.parse(letterData[stepFieldName] as string);
+        return {
+          id: `${stepType}_step:${Date.now()}:from_letter`,
+          sessionId,
+          stepType,
+          highlightedItems: stepData.highlightedItems || [],
+          userAnswers: stepData.userAnswers || [],
+          completedAt: stepData.completedAt,
+          createdAt: letterData.createdAt as string
+        };
+      }
+    }
+  }
+  
+  // Fallback to legacy method
   const stepDataId = await redis.get(`session_${stepType}:${sessionId}`);
   if (!stepDataId) return null;
   
@@ -1319,10 +1479,13 @@ export async function getWritingLogsByLetter(letterId: string): Promise<{
 export async function createUnderstandingSession(letterId: string, highlightedItems: CleanHighlightedItem[]): Promise<UnderstandingSession> {
   const understandingSessionId = `understanding_session:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
   
+  const now = new Date().toISOString();
   const session: UnderstandingSession = {
     understandingSessionId,
     letterId,
-    highlightedItems
+    highlightedItems,
+    createdAt: now,
+    updatedAt: now
   };
 
   await redis.set(understandingSessionId, JSON.stringify(session));
@@ -1367,10 +1530,13 @@ export async function updateUnderstandingSession(understandingSessionId: string,
 export async function createStrengthFindingSession(letterId: string, highlightedItems: CleanStrengthItem[]): Promise<StrengthFindingSession> {
   const strengthFindingSessionId = `strength_finding_session:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
   
+  const now = new Date().toISOString();
   const session: StrengthFindingSession = {
     strengthFindingSessionId,
     letterId,
-    highlightedItems
+    highlightedItems,
+    createdAt: now,
+    updatedAt: now
   };
 
   await redis.set(strengthFindingSessionId, JSON.stringify(session));

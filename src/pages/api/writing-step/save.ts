@@ -7,7 +7,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { sessionId, stepType, highlightedItems, userAnswers } = req.body;
+    const { sessionId, stepType, highlightedItems, userAnswers, letterId } = req.body;
 
     if (!sessionId || !stepType || !highlightedItems || !userAnswers) {
       return res.status(400).json({ 
@@ -15,7 +15,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    const stepData = await saveWritingStepData(sessionId, stepType, highlightedItems, userAnswers);
+    const stepData = await saveWritingStepData(sessionId, stepType, highlightedItems, userAnswers, letterId);
 
     res.status(200).json({ 
       message: 'Writing step data saved successfully',

@@ -334,7 +334,8 @@ const Writing: React.FC = () => {
             sessionId,
             stepType: 'understanding',
             highlightedItems,
-            userAnswers
+            userAnswers,
+            letterId
           }),
         });
 
@@ -375,7 +376,8 @@ const Writing: React.FC = () => {
             sessionId,
             stepType: 'strength_finding',
             highlightedItems: strengthItems,
-            userAnswers
+            userAnswers,
+            letterId
           }),
         });
 
