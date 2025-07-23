@@ -9,7 +9,6 @@ import {
 } from '../../../../../lib/database';
 import { 
   WritingStepData, 
-  ReflectionStepData, 
   MagicMixInteractionData, 
   SolutionExplorationData,
   InspectionData,

@@ -25,6 +25,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   } catch (error) {
     console.error('Error fetching generated letter:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    console.error('Stack trace:', error instanceof Error ? error.stack : 'No stack trace');
+    res.status(500).json({ 
+      message: 'Internal server error',
+      error: error instanceof Error ? error.message : String(error)
+    });
   }
 }

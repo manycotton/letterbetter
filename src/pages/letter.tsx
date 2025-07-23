@@ -43,7 +43,7 @@ const Letter: React.FC = () => {
 
   // 편지 생성 함수
   const generateLetter = async () => {
-    if (!userId) return;
+    if (!userId || isLoadingLetter) return; // 이미 로딩 중이면 중복 요청 방지
 
     setIsLoadingLetter(true);
     setLetterError(null);
@@ -115,9 +115,12 @@ const Letter: React.FC = () => {
     }
   };
 
-  // 페이지 로드 시 편지 생성
+  // 페이지 로드 시 편지 생성 (중복 방지를 위해 ref 사용)
+  const letterGenerationAttempted = React.useRef(false);
+  
   useEffect(() => {
-    if (userId && !generatedLetter && !isLoadingLetter) {
+    if (userId && !generatedLetter && !isLoadingLetter && !letterGenerationAttempted.current) {
+      letterGenerationAttempted.current = true;
       generateLetter();
     }
   }, [userId]);

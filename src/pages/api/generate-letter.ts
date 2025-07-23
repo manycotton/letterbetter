@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import OpenAI from 'openai';
-import { saveGeneratedLetter, saveStrengthAnalysisLog, getQuestionAnswers } from '../../../lib/database';
+import { saveGeneratedLetter, saveStrengthAnalysisLog, getQuestionAnswers, getGeneratedLetter } from '../../../lib/database';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -111,19 +111,23 @@ ${generalContent}
       messages: [
         {
           role: "system",
-          content: "당신은 사용자의 강점을 분석하여 기존 카테고리에 매칭하거나 새로운 카테고리를 생성하는 전문가입니다. 반드시 JSON 형식으로 응답해주세요."
+          content: "당신은 사용자의 강점을 분석하여 기존 카테고리에 매칭하거나 새로운 카테고리를 생성하는 전문가입니다. 반드시 유효한 JSON 형식으로만 응답해주세요. 다른 텍스트나 설명 없이 오직 JSON만 반환하세요. 응답은 {\"existing\": [...], \"new\": [...]} 형태여야 합니다."
         },
         {
           role: "user",
           content: categorizationPrompt
         }
       ],
-      temperature: 0.3,
-      max_tokens: 300
+      temperature: 0.1,
+      max_tokens: 300,
+      response_format: { type: "json_object" }
     });
 
     const result = completion.choices[0].message.content || '';
+    console.log('OpenAI categorization raw response:', result);
+    
     try {
+      // Try to parse as JSON first
       const parsed = JSON.parse(result);
       return {
         existingCategories: parsed.existing || [],
@@ -131,6 +135,23 @@ ${generalContent}
       };
     } catch (parseError) {
       console.error('Error parsing categorization result:', parseError);
+      console.log('Raw result that failed to parse:', result);
+      
+      // Try to extract JSON from the response if it's wrapped in text
+      const jsonMatch = result.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          const parsed = JSON.parse(jsonMatch[0]);
+          return {
+            existingCategories: parsed.existing || [],
+            newCategories: parsed.new || []
+          };
+        } catch (secondParseError) {
+          console.error('Second parse attempt also failed:', secondParseError);
+        }
+      }
+      
+      // Fallback to default categories
       return {existingCategories: ['💡 창의력 폭발'], newCategories: []};
     }
   } catch (error) {
@@ -263,6 +284,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (!userId || !userAnswers || !userAnswers.answers) {
       return res.status(400).json({ message: 'UserId and userAnswers are required' });
+    }
+
+    // 중복 생성 방지: 최근 생성된 편지가 있는지 확인
+    const existingLetter = await getGeneratedLetter(userId);
+    if (existingLetter) {
+      const createdTime = new Date(existingLetter.createdAt).getTime();
+      const currentTime = Date.now();
+      const timeDiff = currentTime - createdTime;
+      
+      // 30초 이내에 생성된 편지가 있으면 기존 편지 반환
+      if (timeDiff < 30000) {
+        console.log('Preventing duplicate letter generation - returning existing letter');
+        return res.status(200).json({
+          success: true,
+          letter: existingLetter
+        });
+      }
     }
 
     // 사용자 강점 분석 (2번째 답변)

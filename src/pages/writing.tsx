@@ -430,7 +430,7 @@ const Writing: React.FC = () => {
 
   // 세션 자동 저장
   useEffect(() => {
-    if (currentUser && (highlightedItems.length > 0 || strengthItems.length > 0 || reflectionItems.length > 0)) {
+    if (userId && currentUser && (highlightedItems.length > 0 || strengthItems.length > 0 || reflectionItems.length > 0)) {
       const saveSession = async () => {
         try {
           // 데이터베이스 저장용 reflectionItems 준비 (임시 상태 제거)

@@ -1,5 +1,24 @@
 import redis from './upstash';
-import { User, LetterSession, HighlightedItem, StrengthItem, QuestionAnswers, ReflectionItem, GeneratedLetter, ReflectionHints, StrengthAnalysisLog, WritingStepData, ReflectionStepData, InspectionData, SuggestionData, LetterContentData, SolutionExplorationData, AIStrengthTagsData, MagicMixInteractionData, ResponseLetterData, UnderstandingSession, StrengthFindingSession, CleanHighlightedItem, CleanStrengthItem, Letter } from '../types/database';
+import { User, LetterSession, HighlightedItem, StrengthItem, QuestionAnswers, ReflectionItem, GeneratedLetter, ReflectionHints, StrengthAnalysisLog, WritingStepData, InspectionData, SuggestionData, LetterContentData, SolutionExplorationData, AIStrengthTagsData, MagicMixInteractionData, ResponseLetterData, UnderstandingSession, StrengthFindingSession, CleanHighlightedItem, CleanStrengthItem, Letter } from '../types/database';
+
+// 안전한 JSON 파싱 헬퍼 함수
+function safeJSONParse<T>(value: string | undefined | null, defaultValue: T): T {
+  if (!value) return defaultValue;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed;
+  } catch {
+    // JSON 파싱에 실패하면 문자열인 경우 그대로 반환, 아니면 기본값 반환
+    if (typeof value === 'string' && value.trim()) {
+      // letterContent의 경우 문자열을 배열로 감싸서 반환
+      if (Array.isArray(defaultValue)) {
+        return [value] as T;
+      }
+      return value as T;
+    }
+    return defaultValue;
+  }
+}
 
 // User 관련 함수들 - Redis Hash 사용
 export async function createUser(nickname: string, password: string, userIntroduction: string, userStrength: any, userChallenge: any): Promise<User> {
@@ -33,25 +52,23 @@ export async function createUser(nickname: string, password: string, userIntrodu
 
 export async function getUserByNickname(nickname: string): Promise<User | null> {
   try {
-    console.log('Getting user by nickname:', nickname);
-    
     // 모든 user:* 키들을 찾아서 nickname으로 필터링
     const userKeys = await redis.keys('user:*');
     
     for (const userKey of userKeys) {
       const userData = await redis.hgetall(userKey);
+      
       if (userData && Object.keys(userData).length > 0) {
         if (userData.nickname === nickname) {
-          console.log('Found user:', userData.userId);
           
           // Hash 데이터를 User 객체로 변환
           const user: User = {
             userId: userData.userId as string,
             nickname: userData.nickname as string,
-            password: userData.password as string,
+            password: String(userData.password), // Convert to string to handle number type
             userIntroduction: (userData.userIntroduction as string) || "",
-            userStrength: userData.userStrength ? (typeof userData.userStrength === 'string' ? JSON.parse(userData.userStrength) : userData.userStrength) : { generalStrength: "", keywordBasedStrength: [] },
-            userChallenge: userData.userChallenge ? (typeof userData.userChallenge === 'string' ? JSON.parse(userData.userChallenge) : userData.userChallenge) : { context: "", challenge: "" },
+            userStrength: userData.userStrength ? (typeof userData.userStrength === 'string' ? safeJSONParse(userData.userStrength, { generalStrength: "", keywordBasedStrength: [] }) : userData.userStrength) : { generalStrength: "", keywordBasedStrength: [] },
+            userChallenge: userData.userChallenge ? (typeof userData.userChallenge === 'string' ? safeJSONParse(userData.userChallenge, { context: "", challenge: "" }) : userData.userChallenge) : { context: "", challenge: "" },
             createdAt: userData.createdAt as string
           };
           
@@ -60,7 +77,6 @@ export async function getUserByNickname(nickname: string): Promise<User | null> 
       }
     }
     
-    console.log('User not found with nickname:', nickname);
     return null;
   } catch (error) {
     console.error('Error in getUserByNickname:', error);
@@ -70,7 +86,17 @@ export async function getUserByNickname(nickname: string): Promise<User | null> 
 
 export async function validateUser(nickname: string, password: string): Promise<User | null> {
   const user = await getUserByNickname(nickname);
-  if (!user || user.password !== password) return null;
+  if (!user) {
+    return null;
+  }
+  
+  // Handle type conversion - password might be stored as number or string
+  const storedPassword = String(user.password);
+  const providedPassword = String(password);
+  
+  if (storedPassword !== providedPassword) {
+    return null;
+  }
   
   return user;
 }
@@ -165,6 +191,7 @@ function cleanReflectionItems(items: any[]): ReflectionItem[] {
 }
 
 export async function updateLetterSession(sessionId: string, highlightedItems: HighlightedItem[], strengthItems?: StrengthItem[], reflectionItems?: ReflectionItem[], currentStep?: number, letterId?: string): Promise<void> {
+  console.log('updateLetterSession called with:', { sessionId, letterId, hasHighlightedItems: !!highlightedItems });
   // letterId가 있으면 letter에서 직접 업데이트
   if (letterId) {
     const updateData: any = {
@@ -186,15 +213,37 @@ export async function updateLetterSession(sessionId: string, highlightedItems: H
     return;
   }
   
-  // Fallback: 기존 방식
-  const sessionData = await redis.get(sessionId);
-  if (!sessionData) throw new Error('Session not found');
+  // Fallback: 기존 방식 - hash와 string 둘 다 확인
+  console.log('Looking for session with ID:', sessionId);
+  let sessionData = await redis.get(sessionId);
+  console.log('Session data from redis.get:', sessionData ? 'found' : 'not found');
+  if (!sessionData) {
+    // hash 형태로 저장되어 있는지 확인
+    console.log('Trying to find session as hash...');
+    const hashData = await redis.hgetall(sessionId);
+    console.log('Hash data:', hashData ? Object.keys(hashData) : 'null');
+    if (hashData && Object.keys(hashData).length > 0) {
+      // hash 데이터를 LetterSession 형태로 변환
+      sessionData = {
+        sessionId: hashData.sessionId || sessionId,
+        userId: hashData.userId,
+        highlightedItems: safeJSONParse(hashData.highlightedItems as string, []),
+        strengthItems: safeJSONParse(hashData.strengthItems as string, []),
+        reflectionItems: safeJSONParse(hashData.reflectionItems as string, []),
+        currentStep: parseInt(hashData.currentStep as string) || 0,
+        createdAt: hashData.createdAt || new Date().toISOString(),
+        updatedAt: hashData.updatedAt || new Date().toISOString()
+      };
+    } else {
+      throw new Error('Session not found');
+    }
+  }
   
   let session: LetterSession;
   if (typeof sessionData === 'object') {
     session = sessionData as LetterSession;
   } else {
-    session = JSON.parse(sessionData as string) as LetterSession;
+    session = safeJSONParse(sessionData as string, {} as LetterSession);
   }
   
   session.highlightedItems = highlightedItems;
@@ -220,9 +269,9 @@ export async function getLetterSession(sessionId: string, letterId?: string): Pr
       return {
         id: sessionId,
         userId: letterData.userId as string,
-        highlightedItems: letterData.highlightedItems ? JSON.parse(letterData.highlightedItems as string) : [],
-        strengthItems: letterData.strengthItems ? JSON.parse(letterData.strengthItems as string) : [],
-        reflectionItems: letterData.reflectionItems ? JSON.parse(letterData.reflectionItems as string) : [],
+        highlightedItems: safeJSONParse(letterData.highlightedItems as string, []),
+        strengthItems: safeJSONParse(letterData.strengthItems as string, []),
+        reflectionItems: safeJSONParse(letterData.reflectionItems as string, []),
         currentStep: letterData.currentStep ? parseInt(letterData.currentStep as string) : 1,
         createdAt: letterData.sessionCreatedAt as string || letterData.createdAt as string,
         updatedAt: letterData.sessionUpdatedAt as string || letterData.createdAt as string
@@ -238,7 +287,7 @@ export async function getLetterSession(sessionId: string, letterId?: string): Pr
     return sessionData as LetterSession;
   }
   
-  return JSON.parse(sessionData as string) as LetterSession;
+  return safeJSONParse(sessionData as string, {} as LetterSession);
 }
 
 export async function getUserSessions(userId: string): Promise<LetterSession[]> {
@@ -252,9 +301,9 @@ export async function getUserSessions(userId: string): Promise<LetterSession[]> 
       const session: LetterSession = {
         id: letterData.sessionId as string,
         userId: letterData.userId as string,
-        highlightedItems: letterData.highlightedItems ? JSON.parse(letterData.highlightedItems as string) : [],
-        strengthItems: letterData.strengthItems ? JSON.parse(letterData.strengthItems as string) : [],
-        reflectionItems: letterData.reflectionItems ? JSON.parse(letterData.reflectionItems as string) : [],
+        highlightedItems: safeJSONParse(letterData.highlightedItems as string, []),
+        strengthItems: safeJSONParse(letterData.strengthItems as string, []),
+        reflectionItems: safeJSONParse(letterData.reflectionItems as string, []),
         currentStep: letterData.currentStep ? parseInt(letterData.currentStep as string) : 1,
         createdAt: letterData.sessionCreatedAt as string || letterData.createdAt as string,
         updatedAt: letterData.sessionUpdatedAt as string || letterData.createdAt as string
@@ -668,8 +717,8 @@ export async function getLetter(letterId: string): Promise<Letter | null> {
     characterName: letterData.characterName as string,
     age: parseInt(letterData.age as string),
     occupation: letterData.occupation as string,
-    letterContent: letterData.letterContent ? JSON.parse(letterData.letterContent as string) : [],
-    usedStrengths: letterData.usedStrengths ? JSON.parse(letterData.usedStrengths as string) : [],
+    letterContent: safeJSONParse(letterData.letterContent as string, []),
+    usedStrengths: safeJSONParse(letterData.usedStrengths as string, []),
     createdAt: letterData.createdAt as string,
     understandingSessionId: letterData.understandingSessionId as string,
     strengthFindingSessionId: letterData.strengthFindingSessionId as string,
@@ -755,8 +804,8 @@ export async function getGeneratedLetter(userId: string): Promise<GeneratedLette
           characterName: letterData.characterName as string,
           age: parseInt(letterData.age as string),
           occupation: letterData.occupation as string,
-          letterContent: letterData.letterContent ? JSON.parse(letterData.letterContent as string) : [],
-          usedStrengths: letterData.usedStrengths ? JSON.parse(letterData.usedStrengths as string) : [],
+          letterContent: Array.isArray(letterData.letterContent) ? letterData.letterContent : safeJSONParse(letterData.letterContent as string, []),
+          usedStrengths: Array.isArray(letterData.usedStrengths) ? letterData.usedStrengths : safeJSONParse(letterData.usedStrengths as string, []),
           strengthAnalysisLogId: (letterData.strengthAnalysisLogId as string) || undefined,
           createdAt: letterData.createdAt as string,
           updatedAt: letterData.updatedAt as string
@@ -791,8 +840,8 @@ export async function getAllGeneratedLetters(userId: string): Promise<GeneratedL
           characterName: letterData.characterName as string,
           age: parseInt(letterData.age as string),
           occupation: letterData.occupation as string,
-          letterContent: letterData.letterContent ? JSON.parse(letterData.letterContent as string) : [],
-          usedStrengths: letterData.usedStrengths ? JSON.parse(letterData.usedStrengths as string) : [],
+          letterContent: Array.isArray(letterData.letterContent) ? letterData.letterContent : safeJSONParse(letterData.letterContent as string, []),
+          usedStrengths: Array.isArray(letterData.usedStrengths) ? letterData.usedStrengths : safeJSONParse(letterData.usedStrengths as string, []),
           strengthAnalysisLogId: (letterData.strengthAnalysisLogId as string) || undefined,
           createdAt: letterData.createdAt as string,
           updatedAt: letterData.updatedAt as string
@@ -896,8 +945,27 @@ export async function saveWritingStepData(sessionId: string, stepType: 'understa
       }
     }
     
-    // Keep session mapping for backward compatibility
-    await redis.set(`session_${stepType}:${sessionId}`, stepData.id);
+    // Store the actual data array in session mapping instead of just ID
+    const sessionData = stepType === 'understanding' ? 
+      highlightedItems.map(item => ({
+        id: item.id,
+        color: item.color,
+        highlightedText: item.text,
+        problemReason: item.problemReason || '',
+        userExplanation: item.userExplanation || '',
+        emotionInference: item.emotionInference || '',
+        completedAt: new Date().toISOString()
+      })) :
+      highlightedItems.map(item => ({
+        id: item.id,
+        color: item.color,
+        highlightedText: item.text,
+        strengthDescription: (item as any).strengthDescription || '',
+        strengthApplication: (item as any).strengthApplication || '',
+        completedAt: new Date().toISOString()
+      }));
+
+    await redis.set(`session_${stepType}:${sessionId}`, JSON.stringify(sessionData));
     
     return stepData;
   } catch (error) {
@@ -906,160 +974,125 @@ export async function saveWritingStepData(sessionId: string, stepType: 'understa
   }
 }
 
-export async function getWritingStepData(sessionId: string, stepType: 'understanding' | 'strength_finding'): Promise<WritingStepData | null> {
-  // Find letter by sessionId
-  const letterKeys = await redis.keys('letter:*');
-  for (const letterKey of letterKeys) {
-    const letterData = await redis.hgetall(letterKey);
-    if (letterData && Object.keys(letterData).length > 0 && letterData.sessionId === sessionId) {
-      const stepFieldName = stepType === 'understanding' ? 'understandingStep' : 'strengthFindingStep';
-      if (letterData[stepFieldName]) {
-        const stepData = JSON.parse(letterData[stepFieldName] as string);
-        return {
-          id: `${stepType}_step:${Date.now()}:from_letter`,
-          sessionId,
-          stepType,
-          highlightedItems: stepData.highlightedItems || [],
-          userAnswers: stepData.userAnswers || [],
-          completedAt: stepData.completedAt,
-          createdAt: letterData.createdAt as string
-        };
-      }
+export async function getWritingStepData(sessionId: string, stepType: 'understanding' | 'strength_finding'): Promise<any[]> {
+  try {
+    // Get data directly from session mapping
+    const sessionData = await redis.get(`session_${stepType}:${sessionId}`);
+    if (sessionData && typeof sessionData === 'string') {
+      return JSON.parse(sessionData);
     }
+    return [];
+  } catch (error) {
+    console.error('Error getting writing step data:', error);
+    return [];
   }
-  
-  // Fallback to legacy method
-  const stepDataId = await redis.get(`session_${stepType}:${sessionId}`);
-  if (!stepDataId) return null;
-  
-  const stepData = await redis.get(stepDataId as string);
-  if (!stepData) return null;
-  
-  if (typeof stepData === 'object') {
-    return stepData as WritingStepData;
-  }
-  
-  return JSON.parse(stepData as string) as WritingStepData;
 }
 
 // Reflection Step Data functions
-export async function saveReflectionStepData(sessionId: string, reflectionItems: ReflectionItem[], selectedHintTags: Array<{reflectionId: string; tags: string[]}>, allGeneratedHints: string[]): Promise<ReflectionStepData> {
-  const reflectionDataId = `reflection_step:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
-  
+export async function saveReflectionStepData(sessionId: string, reflectionItems: ReflectionItem[], selectedHintTags: Array<{reflectionId: string; tags: string[]}>, allGeneratedHints: string[]): Promise<any[]> {
   // Legacy 필드 제거
   const cleanedReflectionItems = cleanReflectionItems(reflectionItems);
   
-  const reflectionData: ReflectionStepData = {
-    id: reflectionDataId,
-    sessionId,
-    reflectionItems: cleanedReflectionItems,
-    selectedHintTags,
-    allGeneratedHints,
-    completedAt: new Date().toISOString(),
-    createdAt: new Date().toISOString()
-  };
+  // Store reflection items as array directly
+  const reflectionData = cleanedReflectionItems.map(item => ({
+    id: item.id,
+    content: item.content,
+    keywords: item.keywords || [],
+    selectedTags: item.selectedTags || [],
+    inspectionStep: item.inspectionStep || 0,
+    emotionCheckResult: item.emotionCheckResult || null,
+    blameCheckResult: item.blameCheckResult || null,
+    solutionContent: item.solutionContent || '',
+    solutionCompleted: item.solutionCompleted || false,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    completedAt: new Date().toISOString()
+  }));
 
-  await redis.set(reflectionDataId, JSON.stringify(reflectionData));
-  await redis.set(`session_reflection:${sessionId}`, reflectionDataId);
+  await redis.set(`session_reflection:${sessionId}`, JSON.stringify(reflectionData));
   
   return reflectionData;
 }
 
-export async function getReflectionStepData(sessionId: string): Promise<ReflectionStepData | null> {
-  const reflectionDataId = await redis.get(`session_reflection:${sessionId}`);
-  if (!reflectionDataId) return null;
-  
-  const reflectionData = await redis.get(reflectionDataId as string);
-  if (!reflectionData) return null;
-  
-  if (typeof reflectionData === 'object') {
-    return reflectionData as ReflectionStepData;
-  }
-  
-  return JSON.parse(reflectionData as string) as ReflectionStepData;
-}
-
-// 버전 관리를 위한 새로운 함수들
-export async function saveReflectionStepDataWithVersioning(sessionId: string, reflectionItems: ReflectionItem[], selectedHintTags: Array<{reflectionId: string; tags: string[]}>, allGeneratedHints: string[]): Promise<ReflectionStepData> {
-  const timestamp = Date.now();
-  const reflectionDataId = `reflection_step:${timestamp}:${Math.random().toString(36).substr(2, 9)}`;
-  
-  // Legacy 필드 제거
-  const cleanedReflectionItems = cleanReflectionItems(reflectionItems);
-  
-  const reflectionData: ReflectionStepData = {
-    id: reflectionDataId,
-    sessionId,
-    reflectionItems: cleanedReflectionItems,
-    selectedHintTags,
-    allGeneratedHints,
-    completedAt: new Date().toISOString(),
-    createdAt: new Date().toISOString()
-  };
-
-  await redis.set(reflectionDataId, JSON.stringify(reflectionData));
-  
-  // 버전 리스트에 추가 (덮어쓰지 않고 추가)
-  await redis.lpush(`session_reflection_versions:${sessionId}`, reflectionDataId);
-  
-  // 최신 버전으로도 설정 (기존 호환성 유지)
-  await redis.set(`session_reflection:${sessionId}`, reflectionDataId);
-  
-  return reflectionData;
-}
-
-export async function getAllReflectionStepVersions(sessionId: string): Promise<ReflectionStepData[]> {
-  const versionIds = await redis.lrange(`session_reflection_versions:${sessionId}`, 0, -1);
-  const versions: ReflectionStepData[] = [];
-  
-  for (const versionId of versionIds) {
-    try {
-      const reflectionData = await redis.get(versionId as string);
-      if (reflectionData) {
-        const parsedData = typeof reflectionData === 'object' 
-          ? reflectionData as ReflectionStepData 
-          : JSON.parse(reflectionData as string) as ReflectionStepData;
-        versions.push(parsedData);
-      }
-    } catch (error) {
-      console.error(`Error loading reflection version ${versionId}:`, error);
+export async function getReflectionStepData(sessionId: string): Promise<any[]> {
+  try {
+    const reflectionData = await redis.get(`session_reflection:${sessionId}`);
+    if (reflectionData && typeof reflectionData === 'string') {
+      return JSON.parse(reflectionData);
     }
+    return [];
+  } catch (error) {
+    console.error('Error getting reflection step data:', error);
+    return [];
   }
-  
-  // 시간순으로 정렬 (최신 순)
-  return versions.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
-// Inspection Data functions
+// 버전 관리 기능 제거 - saveReflectionStepData와 동일하게 작동
+export async function saveReflectionStepDataWithVersioning(sessionId: string, reflectionItems: ReflectionItem[], selectedHintTags: Array<{reflectionId: string; tags: string[]}>, allGeneratedHints: string[]): Promise<any[]> {
+  return saveReflectionStepData(sessionId, reflectionItems, selectedHintTags, allGeneratedHints);
+}
+
+export async function getAllReflectionStepVersions(sessionId: string): Promise<any[]> {
+  // 버전 관리 기능 제거 - 현재 reflection 데이터만 반환
+  return getReflectionStepData(sessionId);
+}
+
+// Inspection Data functions - Consolidated with reflection data
 export async function saveInspectionData(sessionId: string, inspectionResults: Array<{reflectionId: string; emotionCheck: any; blameCheck: any}>): Promise<InspectionData> {
-  const inspectionDataId = `inspection:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
+  // Get current reflection data and update with inspection results
+  const reflectionData = await getReflectionStepData(sessionId);
   
-  const inspectionData: InspectionData = {
-    id: inspectionDataId,
+  // Update reflection items with inspection results
+  const updatedReflectionData = reflectionData.map(item => {
+    const inspectionResult = inspectionResults.find(result => result.reflectionId === item.id);
+    if (inspectionResult) {
+      return {
+        ...item,
+        emotionCheckResult: inspectionResult.emotionCheck,
+        blameCheckResult: inspectionResult.blameCheck,
+        updatedAt: new Date().toISOString()
+      };
+    }
+    return item;
+  });
+
+  // Store updated reflection data with inspection results
+  await redis.hset(`session_inspection:${sessionId}`, {
+    inspectionResults: JSON.stringify(inspectionResults),
+    completedAt: new Date().toISOString(),
+    createdAt: new Date().toISOString()
+  });
+  
+  // Also update the reflection data
+  await redis.set(`session_reflection:${sessionId}`, JSON.stringify(updatedReflectionData));
+  
+  return {
+    id: `session_inspection:${sessionId}`,
     sessionId,
     inspectionResults,
     completedAt: new Date().toISOString(),
     createdAt: new Date().toISOString()
   };
-
-  await redis.set(inspectionDataId, JSON.stringify(inspectionData));
-  await redis.set(`session_inspection:${sessionId}`, inspectionDataId);
-  
-  return inspectionData;
 }
 
 export async function getInspectionData(sessionId: string): Promise<InspectionData | null> {
-  const inspectionDataId = await redis.get(`session_inspection:${sessionId}`);
-  if (!inspectionDataId) return null;
-  
-  const inspectionData = await redis.get(inspectionDataId as string);
-  if (!inspectionData) return null;
-  
-  if (typeof inspectionData === 'object') {
-    return inspectionData as InspectionData;
+  try {
+    const inspectionHash = await redis.hgetall(`session_inspection:${sessionId}`);
+    if (!inspectionHash || Object.keys(inspectionHash).length === 0) return null;
+    
+    const inspectionResults = inspectionHash.inspectionResults ? JSON.parse(inspectionHash.inspectionResults as string) : [];
+    
+    return {
+      id: `session_inspection:${sessionId}`,
+      sessionId,
+      inspectionResults,
+      completedAt: inspectionHash.completedAt as string || '',
+      createdAt: inspectionHash.createdAt as string || ''
+    };
+  } catch (error) {
+    console.error('Error getting inspection data:', error);
+    return null;
   }
-  
-  return JSON.parse(inspectionData as string) as InspectionData;
 }
 
 // Suggestion Data functions
@@ -1309,10 +1342,10 @@ export async function getResponseLetterByLetter(letterId: string): Promise<Respo
 
 // letterId 기반 writing 로그 조회 함수
 export async function getWritingLogsByLetterId(letterId: string): Promise<{
-  understandingStep: WritingStepData | null;
-  strengthStep: WritingStepData | null;
-  reflectionStep: ReflectionStepData | null;
-  reflectionStepVersions: ReflectionStepData[];
+  understandingStep: any[] | null;
+  strengthStep: any[] | null;
+  reflectionStep: any[] | null;
+  reflectionStepVersions: any[];
   magicMixData: MagicMixInteractionData | null;
   solutionExploration: SolutionExplorationData | null;
   inspectionData: InspectionData | null;
@@ -1393,10 +1426,10 @@ export async function getWritingLogsByLetterId(letterId: string): Promise<{
 
 // 편지별 모든 writing 로그 조회 함수 (기존 answersId 기반)
 export async function getWritingLogsByLetter(letterId: string): Promise<{
-  understandingStep: WritingStepData | null;
-  strengthStep: WritingStepData | null;
-  reflectionStep: ReflectionStepData | null;
-  reflectionStepVersions: ReflectionStepData[];
+  understandingStep: any[] | null;
+  strengthStep: any[] | null;
+  reflectionStep: any[] | null;
+  reflectionStepVersions: any[];
   magicMixData: MagicMixInteractionData | null;
   solutionExploration: SolutionExplorationData | null;
   inspectionData: InspectionData | null;

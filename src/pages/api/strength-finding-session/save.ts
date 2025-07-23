@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { createOrUpdateStrengthFindingSession } from '../../../lib/database';
-import { CleanStrengthItem } from '../../../types/database';
+import { createOrUpdateStrengthFindingSession } from '../../../../lib/database';
+import { CleanStrengthItem } from '../../../../types/database';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {

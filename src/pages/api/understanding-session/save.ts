@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { createOrUpdateUnderstandingSession } from '../../../lib/database';
-import { CleanHighlightedItem } from '../../../types/database';
+import { createOrUpdateUnderstandingSession } from '../../../../lib/database';
+import { CleanHighlightedItem } from '../../../../types/database';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {

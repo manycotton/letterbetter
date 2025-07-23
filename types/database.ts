@@ -217,18 +217,6 @@ export interface WritingStepData {
   createdAt: string;
 }
 
-export interface ReflectionStepData {
-  id: string;
-  sessionId: string;
-  reflectionItems: ReflectionItem[];
-  selectedHintTags: Array<{
-    reflectionId: string;
-    tags: string[];
-  }>;
-  allGeneratedHints: string[];
-  completedAt: string;
-  createdAt: string;
-}
 
 export interface InspectionData {
   id: string;

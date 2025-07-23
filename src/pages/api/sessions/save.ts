@@ -11,15 +11,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     console.log('Sessions save API called with:', { userId, sessionId, letterId, hasHighlightedItems: !!highlightedItems });
 
-    if (!userId || !highlightedItems) {
-      return res.status(400).json({ message: 'UserId and highlightedItems are required' });
+    if (!userId) {
+      return res.status(400).json({ message: 'UserId is required' });
     }
+
+    // highlightedItems가 없거나 빈 배열인 경우 빈 배열로 초기화
+    const processedHighlightedItems = highlightedItems || [];
 
     let session;
     if (sessionId) {
       // 기존 세션 업데이트
       try {
-        await updateLetterSession(sessionId, highlightedItems, reflectionItems, currentStep);
+        await updateLetterSession(sessionId, processedHighlightedItems, reflectionItems, currentStep);
         session = await getLetterSession(sessionId);
         if (!session) {
           return res.status(404).json({ message: 'Session not found after update' });
@@ -30,7 +33,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     } else {
       // 새 세션 생성 (letterId 우선, 없으면 userId 사용)
-      session = await createLetterSession(userId, highlightedItems, undefined, letterId || userId);
+      session = await createLetterSession(userId, processedHighlightedItems, undefined, letterId && letterId.trim() ? letterId : undefined);
     }
 
     res.status(200).json({ 
