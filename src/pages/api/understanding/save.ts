@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { saveUnderstandingSession, updateUnderstandingSession } from '../../../../lib/database';
+import { createUnderstandingSession, updateUnderstandingSession, getUnderstandingSession } from '../../../../lib/database';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -29,7 +29,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (understandingSessionId) {
       // 기존 세션 업데이트
       await updateUnderstandingSession(understandingSessionId, highlightedItems);
-      const { getUnderstandingSession } = require('../../../../lib/database');
       understandingSession = await getUnderstandingSession(understandingSessionId);
     } else {
       // 새 세션 생성
@@ -38,7 +37,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           message: 'letterId is required for new session' 
         });
       }
-      understandingSession = await saveUnderstandingSession(letterId, highlightedItems);
+      understandingSession = await createUnderstandingSession(letterId, highlightedItems);
     }
 
     console.log('Understanding session saved successfully');

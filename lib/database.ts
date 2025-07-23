@@ -1511,6 +1511,19 @@ export async function getUnderstandingSessionByLetter(letterId: string): Promise
   }
 }
 
+export async function getUnderstandingSession(understandingSessionId: string): Promise<UnderstandingSession | null> {
+  try {
+    const sessionData = await redis.get(understandingSessionId);
+    if (!sessionData) {
+      return null;
+    }
+    return typeof sessionData === "object" ? sessionData as UnderstandingSession : JSON.parse(sessionData as string) as UnderstandingSession;
+  } catch (error) {
+    console.error("Error getting understanding session:", error);
+    return null;
+  }
+}
+
 export async function updateUnderstandingSession(understandingSessionId: string, highlightedItems: CleanHighlightedItem[]): Promise<void> {
   try {
     const sessionData = await redis.get(understandingSessionId);
@@ -1562,6 +1575,19 @@ export async function getStrengthFindingSessionByLetter(letterId: string): Promi
   }
 }
 
+export async function getStrengthFindingSession(strengthFindingSessionId: string): Promise<StrengthFindingSession | null> {
+  try {
+    const sessionData = await redis.get(strengthFindingSessionId);
+    if (!sessionData) {
+      return null;
+    }
+    return typeof sessionData === "object" ? sessionData as StrengthFindingSession : JSON.parse(sessionData as string) as StrengthFindingSession;
+  } catch (error) {
+    console.error("Error getting strength finding session:", error);
+    return null;
+  }
+}
+
 export async function updateStrengthFindingSession(strengthFindingSessionId: string, highlightedItems: CleanStrengthItem[]): Promise<void> {
   try {
     const sessionData = await redis.get(strengthFindingSessionId);
@@ -1573,6 +1599,38 @@ export async function updateStrengthFindingSession(strengthFindingSessionId: str
     await redis.set(strengthFindingSessionId, JSON.stringify(session));
   } catch (error) {
     console.error("Error updating strength finding session:", error);
+    throw error;
+  }
+}
+
+export async function createOrUpdateUnderstandingSession(sessionId: string, highlightedItems: CleanHighlightedItem[]): Promise<UnderstandingSession> {
+  try {
+    const existing = await getUnderstandingSession(sessionId);
+    if (existing) {
+      await updateUnderstandingSession(sessionId, highlightedItems);
+      return await getUnderstandingSession(sessionId) as UnderstandingSession;
+    } else {
+      // Create new session - we need letterId for this
+      throw new Error("Cannot create new session without letterId");
+    }
+  } catch (error) {
+    console.error("Error creating or updating understanding session:", error);
+    throw error;
+  }
+}
+
+export async function createOrUpdateStrengthFindingSession(sessionId: string, highlightedItems: CleanStrengthItem[]): Promise<StrengthFindingSession> {
+  try {
+    const existing = await getStrengthFindingSession(sessionId);
+    if (existing) {
+      await updateStrengthFindingSession(sessionId, highlightedItems);
+      return await getStrengthFindingSession(sessionId) as StrengthFindingSession;
+    } else {
+      // Create new session - we need letterId for this
+      throw new Error("Cannot create new session without letterId");
+    }
+  } catch (error) {
+    console.error("Error creating or updating strength finding session:", error);
     throw error;
   }
 }

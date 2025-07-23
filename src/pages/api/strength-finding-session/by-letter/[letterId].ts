@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getUnderstandingSessionByLetter } from '../../../../../lib/database/sessions';
+import { getStrengthFindingSessionByLetter } from '../../../../lib/database';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -13,7 +13,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ message: 'Invalid letter ID' });
     }
 
-    const session = await getUnderstandingSessionByLetter(letterId);
+    const session = await getStrengthFindingSessionByLetter(letterId);
     
     if (!session) {
       return res.status(404).json({ message: 'Session not found for this letter' });
@@ -22,7 +22,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.status(200).json(session);
 
   } catch (error) {
-    console.error('Error fetching understanding session by letter:', error);
+    console.error('Error fetching strength finding session by letter:', error);
     res.status(500).json({ 
       message: 'Internal server error',
       error: error instanceof Error ? error.message : 'Unknown error' 

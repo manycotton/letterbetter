@@ -44,13 +44,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     };
 
     // Get all user's question answers
-    const questionAnswers = []; // await getUserQuestionAnswers(userId);
+    const questionAnswers: any[] = []; // await getUserQuestionAnswers(userId);
 
     // Get all generated letters for this user
-    const generatedLetters = []; // await getAllGeneratedLetters(userId);
+    const generatedLetters: any[] = []; // await getAllGeneratedLetters(userId);
 
     // Get writing logs and response letters by letter
-    const letterData = [];
+    const letterData: any[] = [];
     for (let i = 0; i < generatedLetters.length; i++) {
       const letter = generatedLetters[i];
       try {

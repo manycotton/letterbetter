@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { saveStrengthFindingSession, updateStrengthFindingSession } from '../../../../lib/database';
+import { createStrengthFindingSession, updateStrengthFindingSession, getStrengthFindingSession } from '../../../../lib/database';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -29,7 +29,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (strengthFindingSessionId) {
       // 기존 세션 업데이트
       await updateStrengthFindingSession(strengthFindingSessionId, strengthItems);
-      const { getStrengthFindingSession } = require('../../../../lib/database');
       strengthFindingSession = await getStrengthFindingSession(strengthFindingSessionId);
     } else {
       // 새 세션 생성
@@ -38,7 +37,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           message: 'letterId is required for new session' 
         });
       }
-      strengthFindingSession = await saveStrengthFindingSession(letterId, strengthItems);
+      strengthFindingSession = await createStrengthFindingSession(letterId, strengthItems);
     }
 
     console.log('Strength finding session saved successfully');
