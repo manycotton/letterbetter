@@ -4,7 +4,6 @@ interface StrengthItem {
   id: string;
   text: string;
   color: string;
-  originalText: string;
   paragraphIndex: number;
   strengthDescription?: string;
   strengthApplication?: string;

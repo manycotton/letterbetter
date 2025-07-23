@@ -9,7 +9,7 @@ const Questions: React.FC = () => {
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<string[]>([]);
   const [currentUser, setCurrentUser] = useState<any>(null);
-  const [answersId, setAnswersId] = useState<string | null>(null);
+  const [savedUserId, setSavedUserId] = useState<string | null>(null);
 
   // 사용자 정보 로드
   useEffect(() => {
@@ -90,9 +90,19 @@ const Questions: React.FC = () => {
   ];
 
   const handleAnswerSubmit = async (answer: string) => {
+    console.log('=== FRONTEND DEBUG ===');
+    console.log('currentQuestion:', currentQuestion);
+    console.log('answer received:', answer);
+    console.log('answer type:', typeof answer);
+    console.log('currentUser:', currentUser);
+    
     const newAnswers = [...answers];
     newAnswers[currentQuestion] = answer; // 현재 질문 위치에 답변 설정
     setAnswers(newAnswers);
+    
+    console.log('newAnswers:', newAnswers);
+    console.log('newAnswers length:', newAnswers.length);
+    console.log('======================');
     
     // 답변을 데이터베이스에 저장
     if (currentUser) {
@@ -103,16 +113,15 @@ const Questions: React.FC = () => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            userId: currentUser.id,
-            answers: newAnswers,
-            answersId
+            userId: currentUser.userId,
+            answers: newAnswers
           }),
         });
 
         if (response.ok) {
           const { questionAnswers } = await response.json();
-          if (!answersId) {
-            setAnswersId(questionAnswers.id);
+          if (!savedUserId) {
+            setSavedUserId(currentUser.userId);
           }
         }
       } catch (error) {
@@ -129,9 +138,8 @@ const Questions: React.FC = () => {
         pathname: '/result',
         query: { 
           nickname,
-          userId: currentUser?.id,
-          answers: JSON.stringify(newAnswers),
-          answersId
+          userId: currentUser?.userId,
+          answers: JSON.stringify(newAnswers)
         }
       });
     }

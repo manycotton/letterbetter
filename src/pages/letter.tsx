@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import styles from '../styles/Letter.module.css';
 
 interface GeneratedLetter {
+  id: string;
   characterName: string;
   age: number;
   occupation: string;
@@ -12,7 +13,7 @@ interface GeneratedLetter {
 
 const Letter: React.FC = () => {
   const router = useRouter();
-  const { nickname, userId, answersId } = router.query;
+  const { nickname, userId } = router.query;
   const [isShaking, setIsShaking] = useState(false);
   const [isFading, setIsFading] = useState(false);
   const [showLetterContent, setShowLetterContent] = useState(false);
@@ -42,26 +43,40 @@ const Letter: React.FC = () => {
 
   // 편지 생성 함수
   const generateLetter = async () => {
-    if (!answersId) return;
+    if (!userId) return;
 
     setIsLoadingLetter(true);
     setLetterError(null);
 
     try {
-      // 1. 사용자 답변 가져오기
-      const answersResponse = await fetch(`/api/answers/get?answersId=${answersId}`);
-      if (!answersResponse.ok) {
-        throw new Error('Failed to fetch user answers');
+      // 1. 사용자 데이터 가져오기 (User 기준)
+      const userResponse = await fetch(`/api/admin/user/${userId}`);
+      if (!userResponse.ok) {
+        throw new Error(`Failed to fetch user data: ${userResponse.status} ${userResponse.statusText}`);
       }
-      const answersData = await answersResponse.json();
       
-      if (!answersData.answers || answersData.answers.length === 0) {
-        throw new Error('No answers found');
+      // Content-Type 확인
+      const contentType = userResponse.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const responseText = await userResponse.text();
+        console.error('Non-JSON response received:', responseText);
+        throw new Error('Server returned HTML instead of JSON. Check server logs.');
+      }
+      
+      const userData = await userResponse.json();
+      
+      if (!userData.user) {
+        throw new Error('No user data found');
       }
 
-      // 답변을 새로운 형태로 변환
+      // User 데이터를 answers 형식으로 변환
       const userAnswers = {
-        answers: answersData.answers || []
+        answers: [
+          userData.user.userIntroduction || '',
+          userData.user.userStrength?.generalStrength || '',
+          userData.user.userChallenge?.context || '',
+          userData.user.userChallenge?.challenge || ''
+        ]
       };
 
       // 2. 편지 생성 API 호출
@@ -71,14 +86,22 @@ const Letter: React.FC = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          answersId,
+          userId,
           userAnswers,
           userNickname: nickname
         }),
       });
 
       if (!letterResponse.ok) {
-        throw new Error('Failed to generate letter');
+        throw new Error(`Failed to generate letter: ${letterResponse.status} ${letterResponse.statusText}`);
+      }
+      
+      // Content-Type 확인
+      const letterContentType = letterResponse.headers.get('content-type');
+      if (!letterContentType || !letterContentType.includes('application/json')) {
+        const responseText = await letterResponse.text();
+        console.error('Non-JSON response from generate-letter:', responseText);
+        throw new Error('Letter generation returned HTML instead of JSON. Check server logs.');
       }
 
       const letterData = await letterResponse.json();
@@ -94,10 +117,10 @@ const Letter: React.FC = () => {
 
   // 페이지 로드 시 편지 생성
   useEffect(() => {
-    if (answersId && !generatedLetter && !isLoadingLetter) {
+    if (userId && !generatedLetter && !isLoadingLetter) {
       generateLetter();
     }
-  }, [answersId]);
+  }, [userId]);
 
   useEffect(() => {
     if (!isTyping) return;
@@ -224,7 +247,7 @@ const Letter: React.FC = () => {
       query: {
         nickname,
         userId,
-        answersId
+        letterId: generatedLetter?.id
       }
     });
   };

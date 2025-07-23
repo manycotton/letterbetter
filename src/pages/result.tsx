@@ -4,7 +4,7 @@ import styles from '../styles/Result.module.css';
 
 const Result: React.FC = () => {
   const router = useRouter();
-  const { answers, nickname, userId, answersId } = router.query;
+  const { answers, nickname, userId } = router.query;
   const [parsedAnswers, setParsedAnswers] = useState<string[]>([]);
   const [strengthContent, setStrengthContent] = useState('');
   const [strengthTagContents, setStrengthTagContents] = useState<{tag: string, content: string}[]>([]);
@@ -81,8 +81,7 @@ const Result: React.FC = () => {
       pathname: '/letter',
       query: { 
         nickname,
-        userId,
-        answersId
+        userId
       }
     });
   };

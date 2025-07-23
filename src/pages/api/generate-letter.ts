@@ -259,16 +259,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { answersId, userAnswers }: { answersId: string, userAnswers: UserAnswers } = req.body;
+    const { userId, userAnswers }: { userId: string, userAnswers: UserAnswers } = req.body;
 
-    if (!answersId || !userAnswers || !userAnswers.answers) {
-      return res.status(400).json({ message: 'AnswersId and userAnswers are required' });
-    }
-
-    // 사용자 정보 가져오기
-    const answersData = await getQuestionAnswers(answersId);
-    if (!answersData) {
-      return res.status(404).json({ message: 'Answers not found' });
+    if (!userId || !userAnswers || !userAnswers.answers) {
+      return res.status(400).json({ message: 'UserId and userAnswers are required' });
     }
 
     // 사용자 강점 분석 (2번째 답변)
@@ -298,8 +292,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 강점 분석 로그 저장
     const strengthAnalysisLog = await saveStrengthAnalysisLog(
-      answersId,
-      answersData.userId,
+      userId,
       userStrengthsAnalysis,
       selectedStrengths
     );
@@ -437,7 +430,7 @@ ${strengthsInfo}
     };
 
     // 데이터베이스에 저장 (강점 분석 로그 ID 포함)
-    await saveGeneratedLetter(answersId, generatedLetter, strengthAnalysisLog.id);
+    await saveGeneratedLetter(userId, generatedLetter, strengthAnalysisLog.id);
 
     res.status(200).json({
       success: true,

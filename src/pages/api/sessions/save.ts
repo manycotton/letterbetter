@@ -7,7 +7,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { userId, highlightedItems, sessionId, questionAnswersId, reflectionItems, currentStep } = req.body;
+    const { userId, highlightedItems, sessionId, letterId, reflectionItems, currentStep } = req.body;
+
+    console.log('Sessions save API called with:', { userId, sessionId, letterId, hasHighlightedItems: !!highlightedItems });
 
     if (!userId || !highlightedItems) {
       return res.status(400).json({ message: 'UserId and highlightedItems are required' });
@@ -16,11 +18,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     let session;
     if (sessionId) {
       // 기존 세션 업데이트
-      await updateLetterSession(sessionId, highlightedItems, reflectionItems, currentStep);
-      session = await getLetterSession(sessionId);
+      try {
+        await updateLetterSession(sessionId, highlightedItems, reflectionItems, currentStep);
+        session = await getLetterSession(sessionId);
+        if (!session) {
+          return res.status(404).json({ message: 'Session not found after update' });
+        }
+      } catch (error) {
+        console.error('Error updating session:', error);
+        return res.status(404).json({ message: 'Session not found' });
+      }
     } else {
-      // 새 세션 생성
-      session = await createLetterSession(userId, highlightedItems, questionAnswersId);
+      // 새 세션 생성 (letterId 우선, 없으면 userId 사용)
+      session = await createLetterSession(userId, highlightedItems, undefined, letterId || userId);
     }
 
     res.status(200).json({ 

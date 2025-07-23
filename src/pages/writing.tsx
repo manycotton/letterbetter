@@ -8,7 +8,7 @@ interface HighlightedItem {
   id: string;
   text: string;
   color: string;
-  originalText: string;
+  originalText?: string;  // Made optional as we're phasing this out
   paragraphIndex: number;
   problemReason?: string; // 왜 고민이라고 생각했는지
   userExplanation?: string;
@@ -19,7 +19,7 @@ interface StrengthItem {
   id: string;
   text: string;
   color: string;
-  originalText: string;
+  originalText?: string;  // Made optional as we're phasing this out
   paragraphIndex: number;
   strengthDescription?: string;
   strengthApplication?: string;
@@ -66,7 +66,7 @@ interface ReflectionItem {
 
 const Writing: React.FC = () => {
   const router = useRouter();
-  const { answersId } = router.query;
+  const { userId, letterId } = router.query;
   const [highlightedItems, setHighlightedItems] = useState<HighlightedItem[]>([]);
   const [letterContent, setLetterContent] = useState<string[]>([]);
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -139,9 +139,9 @@ const Writing: React.FC = () => {
   // 생성된 편지 로드
   useEffect(() => {
     const loadGeneratedLetter = async () => {
-      if (answersId) {
+      if (userId) {
         try {
-          const response = await fetch(`/api/get-generated-letter?answersId=${answersId}`);
+          const response = await fetch(`/api/get-generated-letter?userId=${userId}`);
           if (response.ok) {
             const data = await response.json();
             if (data.letter) {
@@ -155,7 +155,7 @@ const Writing: React.FC = () => {
     };
 
     loadGeneratedLetter();
-  }, [answersId]);
+  }, [userId]);
 
   // 편지 내용이 변경될 때마다 업데이트
   useEffect(() => {
@@ -172,18 +172,18 @@ const Writing: React.FC = () => {
     }
   }, []);
 
-  // 세션 데이터 로드 (answersId가 있을 때)
+  // 세션 데이터 로드 (userId가 있을 때)
   useEffect(() => {
-    if (currentUser && answersId) {
+    if (currentUser && userId) {
       const loadSessionData = async () => {
         try {
-          const response = await fetch(`/api/sessions/list?userId=${currentUser.id}`);
+          const response = await fetch(`/api/sessions/list?userId=${currentUser.userId}`);
           if (response.ok) {
             const { sessions } = await response.json();
             
-            // answersId와 매칭되는 세션 찾기
+            // userId와 매칭되는 세션 찾기
             const matchingSession = sessions.find((session: any) => 
-              session.questionAnswersId === answersId
+              session.userId === userId
             );
             
             if (matchingSession) {
@@ -249,7 +249,7 @@ const Writing: React.FC = () => {
       
       loadSessionData();
     }
-  }, [currentUser, answersId]);
+  }, [currentUser, userId]);
 
   // 텍스트 영역 높이 자동 조절 함수
   const adjustTextareaHeight = (textarea: HTMLTextAreaElement) => {
@@ -449,13 +449,13 @@ const Writing: React.FC = () => {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              userId: currentUser.id,
+              userId: userId,
               highlightedItems,
               strengthItems,
               reflectionItems: reflectionItemsForDB,
               currentStep,
               sessionId,
-              questionAnswersId: answersId,
+              letterId,
               isUnderstandingCompleted,
               isStrengthCompleted
             }),
@@ -564,7 +564,6 @@ const Writing: React.FC = () => {
                   id: Date.now().toString(),
                   text: selectedText,
                   color: currentColor,
-                  originalText: letterParagraphs[paragraphIndex],
                   paragraphIndex: paragraphIndex
                 };
                 setHighlightedItems(prev => [...prev, newItem]);
@@ -574,7 +573,6 @@ const Writing: React.FC = () => {
                   id: Date.now().toString(),
                   text: selectedText,
                   color: strengthColor,
-                  originalText: letterParagraphs[paragraphIndex],
                   paragraphIndex: paragraphIndex
                 };
                 setStrengthItems(prev => [...prev, newStrengthItem]);
@@ -586,7 +584,6 @@ const Writing: React.FC = () => {
                   id: Date.now().toString(),
                   text: selectedText,
                   color: strengthColor,
-                  originalText: letterParagraphs[paragraphIndex],
                   paragraphIndex: paragraphIndex
                 };
                 setStrengthItems(prev => [...prev, newStrengthItem]);
@@ -787,6 +784,56 @@ const Writing: React.FC = () => {
     };
   }, []);
 
+  // AI 생성 힌트만 데이터베이스에 저장하는 함수 (기존 힌트와 누적)
+  const saveReflectionHintsToDatabase = async (newHints: string[]) => {
+    if (!sessionId) return;
+    
+    try {
+      // 먼저 기존 저장된 reflection 데이터 가져오기
+      let existingHints: string[] = [];
+      let existingReflectionItems: any[] = [];
+      let existingSelectedHintTags: any[] = [];
+      
+      try {
+        const getResponse = await fetch(`/api/writing-step/get-reflection?sessionId=${sessionId}`);
+        if (getResponse.ok) {
+          const existingData = await getResponse.json();
+          existingHints = existingData.allGeneratedHints || [];
+          existingReflectionItems = existingData.reflectionItems || [];
+          existingSelectedHintTags = existingData.selectedHintTags || [];
+        }
+      } catch (getError) {
+        console.log('No existing reflection data found, starting fresh');
+      }
+      
+      // 기존 힌트와 새 힌트 합치기 (중복 제거)
+      const allHints = [...existingHints, ...newHints];
+      const uniqueHints = Array.from(new Set(allHints)); // 중복 제거
+      
+      // 누적된 힌트로 저장
+      const response = await fetch('/api/writing-step/save-reflection', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sessionId,
+          reflectionItems: existingReflectionItems, // 기존 reflection items 유지
+          selectedHintTags: existingSelectedHintTags, // 기존 선택된 태그 유지
+          allGeneratedHints: uniqueHints // 누적된 힌트 저장
+        })
+      });
+      
+      if (!response.ok) {
+        console.error('Failed to save reflection hints:', await response.json());
+      } else {
+        console.log('Reflection hints auto-saved successfully', uniqueHints);
+      }
+    } catch (error) {
+      console.error('Error auto-saving reflection hints:', error);
+    }
+  };
+
   // 고민 데이터를 데이터베이스에 저장하는 함수
   const saveReflectionDataToDatabase = async () => {
     if (!sessionId) return;
@@ -866,17 +913,27 @@ const Writing: React.FC = () => {
       }
 
       const data = await response.json();
-      setReflectionHints(data.hints || []);
+      const hints = data.hints || [];
+      setReflectionHints(hints);
+      
+      // AI가 힌트를 생성하자마자 자동으로 데이터베이스에 저장
+      if (hints.length > 0) {
+        await saveReflectionHintsToDatabase(hints);
+      }
     } catch (error) {
       console.error('Error generating reflection hints:', error);
       // 기본 힌트 제공
-      setReflectionHints([
+      const fallbackHints = [
         '집중력 부족으로 인한 어려움',
         '업무 효율성 문제',
         '동료와의 관계 걱정',
         '자신감 하락',
         '우선순위 설정의 어려움'
-      ]);
+      ];
+      setReflectionHints(fallbackHints);
+      
+      // 기본 힌트도 데이터베이스에 저장
+      await saveReflectionHintsToDatabase(fallbackHints);
     } finally {
       setIsLoadingHints(false);
     }

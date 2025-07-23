@@ -3,7 +3,7 @@ import { useRouter } from 'next/router';
 import styles from '../styles/Admin.module.css';
 
 interface User {
-  id: string;
+  userId: string;
   nickname: string;
   password: string;
   createdAt: string;
@@ -63,7 +63,7 @@ export default function Admin() {
   };
 
   const handleUserDetail = (userId: string) => {
-    router.push(`/admin/user/${userId}`);
+    router.push(`/admin/user-detail?userId=${userId}`);
   };
 
   const handleDeleteUser = async (userId: string, nickname: string) => {
@@ -83,7 +83,7 @@ export default function Admin() {
 
       if (response.ok) {
         // 사용자 목록에서 삭제된 사용자 제거
-        setUsers(users.filter(user => user.id !== userId));
+        setUsers(users.filter(user => user.userId !== userId));
         alert('사용자 데이터가 성공적으로 삭제되었습니다.');
       } else {
         const errorData = await response.json();
@@ -161,7 +161,7 @@ export default function Admin() {
             </thead>
             <tbody>
               {users.map((user) => (
-                <tr key={user.id}>
+                <tr key={user.userId}>
                   <td className={styles.nickname}>{user.nickname}</td>
                   <td className={styles.password}>{user.password}</td>
                   <td className={styles.date}>{formatDate(user.createdAt)}</td>
@@ -169,16 +169,16 @@ export default function Admin() {
                     <div className={styles.actionButtons}>
                       <button
                         className={styles.detailButton}
-                        onClick={() => handleUserDetail(user.id)}
+                        onClick={() => handleUserDetail(user.userId)}
                       >
                         상세보기
                       </button>
                       <button
                         className={styles.deleteButton}
-                        onClick={() => handleDeleteUser(user.id, user.nickname)}
-                        disabled={deletingUserId === user.id}
+                        onClick={() => handleDeleteUser(user.userId, user.nickname)}
+                        disabled={deletingUserId === user.userId}
                       >
-                        {deletingUserId === user.id ? '삭제 중...' : '삭제'}
+                        {deletingUserId === user.userId ? '삭제 중...' : '삭제'}
                       </button>
                     </div>
                   </td>

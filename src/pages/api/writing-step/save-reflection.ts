@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { saveReflectionStepData } from '../../../../lib/database';
+import { saveReflectionStepDataWithVersioning } from '../../../../lib/database';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -15,7 +15,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    const reflectionData = await saveReflectionStepData(sessionId, reflectionItems, selectedHintTags, allGeneratedHints);
+    const reflectionData = await saveReflectionStepDataWithVersioning(sessionId, reflectionItems, selectedHintTags, allGeneratedHints);
 
     res.status(200).json({ 
       message: 'Reflection step data saved successfully',

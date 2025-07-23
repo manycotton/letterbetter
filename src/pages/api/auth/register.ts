@@ -23,8 +23,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(409).json({ message: 'Nickname already exists' });
     }
 
-    // 사용자 생성
-    const user = await createUser(nickname, password);
+    // 사용자 생성 - 기본값으로 빈 데이터 설정
+    const defaultUserIntroduction = "";
+    const defaultUserStrength = {
+      generalStrength: "",
+      keywordBasedStrength: []
+    };
+    const defaultUserChallenge = {
+      context: "",
+      challenge: ""
+    };
+    
+    const user = await createUser(nickname, password, defaultUserIntroduction, defaultUserStrength, defaultUserChallenge);
     
     // 비밀번호 제외하고 응답
     const { password: _, ...userResponse } = user;
@@ -36,6 +46,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   } catch (error) {
     console.error('Error creating user:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    console.error('Error details:', error.message, error.stack);
+    res.status(500).json({ message: 'Internal server error', error: error.message });
   }
 }

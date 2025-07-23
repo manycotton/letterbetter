@@ -29,7 +29,7 @@ export default function Home() {
         setIsModalOpen(false);
         router.push({
           pathname: '/questions',
-          query: { userId: user.id, nickname: user.nickname }
+          query: { userId: user.userId, nickname: user.nickname }
         });
         return;
       }
@@ -53,7 +53,7 @@ export default function Home() {
         setIsModalOpen(false);
         router.push({
           pathname: '/questions',
-          query: { userId: user.id, nickname: user.nickname }
+          query: { userId: user.userId, nickname: user.nickname }
         });
       } else {
         const registerError = await registerResponse.json();

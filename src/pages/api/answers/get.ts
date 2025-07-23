@@ -7,13 +7,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { answersId } = req.query;
+    const { userId } = req.query;
 
-    if (!answersId || typeof answersId !== 'string') {
-      return res.status(400).json({ message: 'AnswersId is required' });
+    if (!userId || typeof userId !== 'string') {
+      return res.status(400).json({ message: 'UserId is required' });
     }
 
-    const questionAnswers = await getQuestionAnswers(answersId);
+    const questionAnswers = await getQuestionAnswers(userId);
     
     if (!questionAnswers) {
       return res.status(404).json({ message: 'Answers not found' });

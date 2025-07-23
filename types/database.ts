@@ -1,7 +1,23 @@
+export interface UserStrength {
+  generalStrength: string;
+  keywordBasedStrength: Array<{
+    keyword: string;
+    content: string;
+  }>;
+}
+
+export interface UserChallenge {
+  context: string;
+  challenge: string;
+}
+
 export interface User {
-  id: string;
+  userId: string;
   nickname: string;
   password: string;
+  userIntroduction: string;
+  userStrength: UserStrength;
+  userChallenge: UserChallenge;
   createdAt: string;
 }
 
@@ -16,7 +32,6 @@ export interface QuestionAnswers {
 export interface LetterSession {
   id: string;
   userId: string;
-  questionAnswersId?: string;
   highlightedItems: HighlightedItem[];
   strengthItems?: StrengthItem[];
   reflectionItems?: ReflectionItem[];
@@ -25,11 +40,51 @@ export interface LetterSession {
   updatedAt: string;
 }
 
+// 새로운 UnderstandingSession 인터페이스
+export interface UnderstandingSession {
+  understandingSessionId: string;
+  letterId: string;
+  highlightedItems: CleanHighlightedItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// 새로운 StrengthFindingSession 인터페이스
+export interface StrengthFindingSession {
+  strengthFindingSessionId: string;
+  letterId: string;
+  highlightedItems: CleanStrengthItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// 정리된 HighlightedItem (고민 이해하기용)
+export interface CleanHighlightedItem {
+  id: string;
+  color: string;
+  highlightedText: string;
+  problemReason?: string;
+  userExplanation?: string;
+  emotionInference?: string;
+  completedAt?: string;
+}
+
+// 정리된 StrengthItem (강점 찾기용)
+export interface CleanStrengthItem {
+  id: string;
+  color: string;
+  highlightedText: string;
+  strengthDescription?: string;
+  strengthApplication?: string;
+  completedAt?: string;
+}
+
+// Legacy HighlightedItem - 기존 코드 호환성을 위해 유지
 export interface HighlightedItem {
   id: string;
   text: string;
   color: string;
-  originalText: string;
+  originalText?: string;  // Made optional as we're phasing this out
   paragraphIndex: number;
   userExplanation?: string;
   conversationHistory?: QAPair[];
@@ -41,7 +96,7 @@ export interface StrengthItem {
   id: string;
   text: string;
   color: string;
-  originalText: string;
+  originalText?: string;  // Made optional as we're phasing this out
   paragraphIndex: number;
   strengthDescription?: string;
   strengthApplication?: string;
@@ -82,7 +137,6 @@ export interface BlameCheckResult {
 
 export interface StrengthAnalysisLog {
   id: string;
-  answersId: string;
   userId: string;
   userStrengthsAnalysis: {
     tagBasedStrengths: Array<{
@@ -106,9 +160,25 @@ export interface StrengthAnalysisLog {
   createdAt: string;
 }
 
+export interface Letter {
+  letterId: string;
+  userId: string;
+  characterName: string;
+  age: number;
+  occupation: string;
+  letterContent: string[];
+  usedStrengths: string[];
+  createdAt: string;
+  understandingSessionId: string;
+  strengthFindingSessionId: string;
+  reflectionSessionId: string;
+  solutionSessionId: string;
+}
+
+// Legacy interface - 기존 코드 호환성을 위해 유지
 export interface GeneratedLetter {
   id: string;
-  answersId: string;
+  userId: string;
   characterName: string;
   age: number;
   occupation: string;

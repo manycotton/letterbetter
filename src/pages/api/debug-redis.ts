@@ -15,8 +15,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // 각 키의 값 확인
     for (const key of keys) {
       try {
-        const value = await redis.get(key);
-        result.data[key] = value;
+        // user 키는 Hash 형태로 조회
+        if (key.startsWith('user:')) {
+          const hashValue = await redis.hgetall(key);
+          result.data[key] = {
+            type: 'hash',
+            ttl: -1,
+            value: hashValue
+          };
+        } else {
+          // 다른 키들은 JSON으로 조회
+          const value = await redis.get(key);
+          result.data[key] = {
+            type: 'json',
+            ttl: -1,
+            value: value
+          };
+        }
       } catch (error) {
         result.data[key] = 'Error: ' + (error instanceof Error ? error.message : String(error));
       }

@@ -3,15 +3,9 @@ import {
   getUserByNickname, 
   getUserQuestionAnswers, 
   getAllGeneratedLetters,
-  getWritingStepData,
-  getReflectionStepData,
-  getMagicMixInteractionData,
-  getResponseLetterData,
-  getSolutionExplorationData,
-  getInspectionData,
-  getSuggestionData,
-  getLetterContentData,
-  getAIStrengthTagsData
+  getWritingLogsByLetter,
+  getWritingLogsByLetterId,
+  getResponseLetterByLetter
 } from '../../../../../lib/database';
 import { 
   WritingStepData, 
@@ -37,99 +31,66 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Get user data
-    const userData = await redis.get(userId);
-    if (!userData) {
+    // Get user data (Hash format)
+    const userData = await redis.hgetall(userId);
+    if (!userData || Object.keys(userData).length === 0) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    const user = typeof userData === 'object' ? userData : JSON.parse(userData as string);
-
-    // Get all user's question answers
-    const questionAnswers = await getUserQuestionAnswers(userId);
-
-    // Get all generated letters for this user
-    const generatedLetters = await getAllGeneratedLetters(userId);
-
-    // Get writing logs from all sessions
-    const userSessions = await redis.lrange(`user_sessions:${userId}`, 0, -1);
-    let writingLogs: {
-      understandingStep: WritingStepData | null;
-      strengthStep: WritingStepData | null;
-      reflectionStep: ReflectionStepData | null;
-      magicMixData: MagicMixInteractionData | null;
-      solutionExploration: SolutionExplorationData | null;
-      inspectionData: InspectionData | null;
-      suggestionData: SuggestionData | null;
-      letterContentData: LetterContentData | null;
-      aiStrengthTagsData: AIStrengthTagsData | null;
-    } = {
-      understandingStep: null,
-      strengthStep: null,
-      reflectionStep: null,
-      magicMixData: null,
-      solutionExploration: null,
-      inspectionData: null,
-      suggestionData: null,
-      letterContentData: null,
-      aiStrengthTagsData: null
+    const user = {
+      ...userData,
+      userStrength: userData.userStrength ? (typeof userData.userStrength === 'string' ? JSON.parse(userData.userStrength) : userData.userStrength) : { generalStrength: "", keywordBasedStrength: [] },
+      userChallenge: userData.userChallenge ? (typeof userData.userChallenge === 'string' ? JSON.parse(userData.userChallenge) : userData.userChallenge) : { context: "", challenge: "" }
     };
 
-    // Collect data from all sessions
-    for (const sessionId of userSessions) {
-      try {
-        const understandingStep = await getWritingStepData(sessionId as string, 'understanding');
-        const strengthStep = await getWritingStepData(sessionId as string, 'strength_finding');
-        const reflectionStep = await getReflectionStepData(sessionId as string);
-        const magicMixData = await getMagicMixInteractionData(sessionId as string);
-        const solutionExploration = await getSolutionExplorationData(sessionId as string);
-        const inspectionData = await getInspectionData(sessionId as string);
-        const suggestionData = await getSuggestionData(sessionId as string);
-        const letterContentData = await getLetterContentData(sessionId as string);
-        const aiStrengthTagsData = await getAIStrengthTagsData(sessionId as string);
+    // Get all user's question answers
+    const questionAnswers = []; // await getUserQuestionAnswers(userId);
 
-        if (understandingStep && !writingLogs.understandingStep) {
-          writingLogs.understandingStep = understandingStep;
-        }
-        if (strengthStep && !writingLogs.strengthStep) {
-          writingLogs.strengthStep = strengthStep;
-        }
-        if (reflectionStep && !writingLogs.reflectionStep) {
-          writingLogs.reflectionStep = reflectionStep;
-        }
-        if (magicMixData && !writingLogs.magicMixData) {
-          writingLogs.magicMixData = magicMixData;
-        }
-        if (solutionExploration && !writingLogs.solutionExploration) {
-          writingLogs.solutionExploration = solutionExploration;
-        }
-        if (inspectionData && !writingLogs.inspectionData) {
-          writingLogs.inspectionData = inspectionData;
-        }
-        if (suggestionData && !writingLogs.suggestionData) {
-          writingLogs.suggestionData = suggestionData;
-        }
-        if (letterContentData && !writingLogs.letterContentData) {
-          writingLogs.letterContentData = letterContentData;
-        }
-        if (aiStrengthTagsData && !writingLogs.aiStrengthTagsData) {
-          writingLogs.aiStrengthTagsData = aiStrengthTagsData;
-        }
+    // Get all generated letters for this user
+    const generatedLetters = []; // await getAllGeneratedLetters(userId);
+
+    // Get writing logs and response letters by letter
+    const letterData = [];
+    for (let i = 0; i < generatedLetters.length; i++) {
+      const letter = generatedLetters[i];
+      try {
+        const writingLogs = await getWritingLogsByLetterId(letter.id);
+        const responseData = await getResponseLetterByLetter(letter.userId);
+        
+        letterData.push({
+          letterNumber: i + 1,
+          letter: letter,
+          questionAnswers: questionAnswers.find(qa => qa.userId === letter.userId),
+          writingLogs: writingLogs,
+          responseData: responseData
+        });
       } catch (error) {
-        console.error(`Error getting data for session ${sessionId}:`, error);
+        console.error(`Error getting data for letter ${letter.userId}:`, error);
       }
     }
 
-    // Get response letters
-    const responseLetters = [];
-    for (const sessionId of userSessions) {
+    // Legacy support: 편지가 없는 사용자에 대한 writing 로그도 포함
+    const lettersWithUserIds = new Set(generatedLetters.map(l => l.userId));
+    const questionsWithoutLetters = questionAnswers.filter(qa => !lettersWithUserIds.has(qa.userId));
+    
+    for (let i = 0; i < questionsWithoutLetters.length; i++) {
+      const qa = questionsWithoutLetters[i];
       try {
-        const responseData = await getResponseLetterData(sessionId as string);
-        if (responseData) {
-          responseLetters.push(responseData);
+        const writingLogs = await getWritingLogsByLetter(qa.id);
+        const responseData = await getResponseLetterByLetter(qa.id);
+        
+        // 로그가 있는 경우에만 추가
+        if (writingLogs.understandingStep || writingLogs.strengthStep || writingLogs.reflectionStep) {
+          letterData.push({
+            letterNumber: generatedLetters.length + i + 1,
+            letter: null,
+            questionAnswers: qa,
+            writingLogs: writingLogs,
+            responseData: responseData
+          });
         }
       } catch (error) {
-        console.error(`Error getting response letter for session ${sessionId}:`, error);
+        console.error(`Error getting data for question ${qa.id}:`, error);
       }
     }
 
@@ -137,8 +98,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       user,
       questionAnswers,
       generatedLetters,
-      writingLogs,
-      responseLetters
+      letterData, // 편지별로 정리된 데이터
+      // Legacy support - 기존 구조 유지
+      writingLogs: letterData.length > 0 ? letterData[0].writingLogs : {
+        understandingStep: null,
+        strengthStep: null,
+        reflectionStep: null,
+        reflectionStepVersions: [],
+        magicMixData: null,
+        solutionExploration: null,
+        inspectionData: null,
+        suggestionData: null,
+        letterContentData: null,
+        aiStrengthTagsData: null
+      },
+      responseLetters: letterData.map(ld => ld.responseData).filter(Boolean)
     };
 
     res.status(200).json(result);

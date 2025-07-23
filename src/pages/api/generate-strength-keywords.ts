@@ -4,7 +4,6 @@ interface StrengthItem {
   id: string;
   text: string;
   color: string;
-  originalText: string;
   paragraphIndex: number;
   strengthDescription?: string;
   strengthApplication?: string;
@@ -44,7 +43,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 강점 정보:
 ${strengthItems.map((item: StrengthItem, index: number) => `
 ${index + 1}. 하이라이트된 본문: "${item.text}"
-   원본 문맥: "${item.originalText}"
    강점 설명: "${item.strengthDescription || '없음'}"
    활용 상황: "${item.strengthApplication || '없음'}"
 `).join('\n')}
