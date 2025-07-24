@@ -761,6 +761,9 @@ const Writing: React.FC = () => {
           existingHints = existingData.allGeneratedHints || [];
           existingReflectionItems = existingData.reflectionItems || [];
           existingSelectedHintTags = existingData.selectedHintTags || [];
+          // Also check for new format
+          const existingSelectedFactors = existingData.selectedFactors || [];
+          const existingSelectedHints = existingData.selectedHints || [];
         }
       } catch (getError) {
         console.log('No existing reflection data found, starting fresh');
@@ -779,7 +782,7 @@ const Writing: React.FC = () => {
         body: JSON.stringify({
           sessionId,
           reflectionItems: existingReflectionItems, // 기존 reflection items 유지
-          selectedHintTags: existingSelectedHintTags, // 기존 선택된 태그 유지
+          selectedHintTags: existingSelectedHintTags, // 기존 선택된 태그 유지 (legacy support)
           allGeneratedHints: uniqueHints // 누적된 힌트 저장
         })
       });
@@ -794,15 +797,26 @@ const Writing: React.FC = () => {
     }
   };
 
+  // Helper function to prepare hint data for API calls
+  const prepareHintData = (items) => {
+    const selectedFactors = {};
+    const selectedHints = {};
+    
+    items.forEach(item => {
+      selectedFactors[item.id] = item.selectedFactors || [];
+      selectedHints[item.id] = item.selectedHints || [];
+    });
+    
+    return { selectedFactors, selectedHints };
+  };
+
   // 고민 데이터를 데이터베이스에 저장하는 함수
   const saveReflectionDataToDatabase = async () => {
     if (!sessionId) return;
     
     try {
-      const selectedHintTags = reflectionItems.map(item => ({
-        reflectionId: item.id,
-        tags: item.selectedHints || []
-      }));
+      // Prepare selectedFactors and selectedHints for each reflection item
+      const { selectedFactors, selectedHints } = prepareHintData(reflectionItems);
       
       const allGeneratedHints = reflectionHints;
       
@@ -820,7 +834,8 @@ const Writing: React.FC = () => {
         body: JSON.stringify({
           sessionId,
           reflectionItems: formattedReflectionItems,
-          selectedHintTags,
+          selectedFactors,
+          selectedHints,
           allGeneratedHints
         })
       });
@@ -1002,11 +1017,7 @@ const Writing: React.FC = () => {
       // Save reflection step data with updated inspection results
       try {
         if (sessionId) {
-          const selectedHintTags = updatedReflectionItems.map(item => ({
-            reflectionId: item.id,
-            tags: item.selectedHints || [],
-            selectedFactors: item.selectedFactors || []
-          }));
+          const { selectedFactors, selectedHints } = prepareHintData(updatedReflectionItems);
           
           const allGeneratedHints = reflectionHints;
           
@@ -1024,15 +1035,14 @@ const Writing: React.FC = () => {
             body: JSON.stringify({
               sessionId,
               reflectionItems: formattedReflectionItems,
-              selectedHintTags,
+              selectedFactors,
+              selectedHints,
               allGeneratedHints
             })
           });
           
           if (!reflectionResponse.ok) {
             console.error('Failed to save reflection data:', await reflectionResponse.json());
-          } else {
-            console.log('Reflection data saved successfully after completion');
           }
         }
       } catch (error) {
@@ -1042,7 +1052,6 @@ const Writing: React.FC = () => {
       // Save completion history after reflection data is saved
       try {
         if (sessionId) {
-          console.log('Saving completion history for reflection:', itemId);
           const completionResponse = await fetch('/api/writing-step/save-completion', {
             method: 'POST',
             headers: {
@@ -1057,9 +1066,6 @@ const Writing: React.FC = () => {
           
           if (!completionResponse.ok) {
             console.error('Failed to save completion history:', await completionResponse.json());
-          } else {
-            const completionData = await completionResponse.json();
-            console.log('Completion history saved successfully:', completionData);
           }
         }
       } catch (error) {
@@ -1219,11 +1225,7 @@ const Writing: React.FC = () => {
     if (currentItem && sessionId) {
       try {
         // environmental factors 업데이트 전 상태를 히스토리에 저장
-        const selectedHintTags = reflectionItems.map(item => ({
-          reflectionId: item.id,
-          tags: item.selectedHints || [],
-          selectedFactors: item.selectedFactors || []
-        }));
+        const { selectedFactors, selectedHints } = prepareHintData(reflectionItems);
         const allGeneratedHints = reflectionHints;
         
         await fetch('/api/writing-step/save-reflection', {
@@ -1234,7 +1236,8 @@ const Writing: React.FC = () => {
           body: JSON.stringify({
             sessionId,
             reflectionItems: reflectionItems,
-            selectedHintTags: selectedHintTags,
+            selectedFactors,
+            selectedHints,
             allGeneratedHints: allGeneratedHints
           }),
         });
@@ -1266,11 +1269,7 @@ const Writing: React.FC = () => {
       // 상태 업데이트와 동시에 히스토리 저장 (업데이트된 상태 사용)
       setTimeout(async () => {
         try {
-          const selectedHintTags = updatedItems.map(item => ({
-            reflectionId: item.id,
-            tags: item.selectedHints || [],
-            selectedFactors: item.selectedFactors || []
-          }));
+          const { selectedFactors, selectedHints } = prepareHintData(updatedItems);
           const allGeneratedHints = reflectionHints;
           
           await fetch('/api/writing-step/save-reflection', {
@@ -1281,7 +1280,8 @@ const Writing: React.FC = () => {
             body: JSON.stringify({
               sessionId,
               reflectionItems: updatedItems, // 업데이트된 상태 사용
-              selectedHintTags,
+              selectedFactors,
+              selectedHints,
               allGeneratedHints
             }),
           });
@@ -1863,10 +1863,7 @@ const Writing: React.FC = () => {
       // Save reflection step data to database
       try {
         if (sessionId) {
-          const selectedHintTags = reflectionItems.map(item => ({
-            reflectionId: item.id,
-            tags: item.selectedHints || []
-          }));
+          const { selectedFactors, selectedHints } = prepareHintData(reflectionItems);
           
           // Collect all generated hints from the current state
           const allGeneratedHints = reflectionHints;
@@ -1888,7 +1885,8 @@ const Writing: React.FC = () => {
             body: JSON.stringify({
               sessionId,
               reflectionItems: formattedReflectionItems,
-              selectedHintTags,
+              selectedFactors,
+              selectedHints,
               allGeneratedHints
             })
           });

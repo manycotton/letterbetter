@@ -1,5 +1,5 @@
 import redis from './upstash';
-import { User, LetterSession, HighlightedItem, StrengthItem, QuestionAnswers, ReflectionItem, GeneratedLetter, ReflectionHints, StrengthAnalysisLog, WritingStepData, InspectionData, SuggestionData, LetterContentData, SolutionExplorationData, AIStrengthTagsData, MagicMixInteractionData, ResponseLetterData, UnderstandingSession, StrengthFindingSession, CleanHighlightedItem, CleanStrengthItem, Letter, ReflectionSupportKeywords } from '../types/database';
+import { User, LetterSession, HighlightedItem, StrengthItem, QuestionAnswers, ReflectionItem, GeneratedLetter, ReflectionHints, ReflectionSupportHints, StrengthAnalysisLog, WritingStepData, InspectionData, SuggestionData, LetterContentData, SolutionExplorationData, AIStrengthTagsData, MagicMixInteractionData, ResponseLetterData, UnderstandingSession, StrengthFindingSession, CleanHighlightedItem, CleanStrengthItem, Letter } from '../types/database';
 
 // 안전한 JSON 파싱 헬퍼 함수
 function safeJSONParse<T>(value: string | undefined | null, defaultValue: T): T {
@@ -22,7 +22,7 @@ function safeJSONParse<T>(value: string | undefined | null, defaultValue: T): T 
 
 // User 관련 함수들 - Redis Hash 사용
 export async function createUser(nickname: string, password: string, userIntroduction: string, userStrength: any, userChallenge: any): Promise<User> {
-  const userId = `user:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
+  const userId = `user:${Date.now()}:${Math.random().toString(36).substring(2, 11)}`;
   
   const user: User = {
     userId,
@@ -103,7 +103,7 @@ export async function validateUser(nickname: string, password: string): Promise<
 
 // Letter Session 관련 함수들 - 이제 letter에 직접 세션 데이터 저장
 export async function createLetterSession(userId: string, highlightedItems: HighlightedItem[], strengthItems?: StrengthItem[], letterId?: string): Promise<LetterSession> {
-  const sessionId = `session:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
+  const sessionId = `session:${Date.now()}:${Math.random().toString(36).substring(2, 11)}`;
   
   const session: LetterSession = {
     id: sessionId,
@@ -596,7 +596,7 @@ export async function saveStrengthAnalysisLog(
   userStrengthsAnalysis: any,
   selectedStrengthsForLetter: any[]
 ): Promise<StrengthAnalysisLog> {
-  const logId = `strength_log:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
+  const logId = `strength_log:${Date.now()}:${Math.random().toString(36).substring(2, 11)}`;
   
   const strengthLog: StrengthAnalysisLog = {
     id: logId,
@@ -670,7 +670,7 @@ export async function saveLetter(
     solutionSessionId: string;
   }
 ): Promise<Letter> {
-  const letterId = `letter:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
+  const letterId = `letter:${Date.now()}:${Math.random().toString(36).substring(2, 11)}`;
   
   const letter: Letter = {
     letterId,
@@ -743,7 +743,7 @@ export async function getUserLetters(userId: string): Promise<Letter[]> {
 
 // Legacy - Generated Letter 관련 함수들 (기존 코드 호환성을 위해 유지)
 export async function saveGeneratedLetter(userId: string, letterData: any, strengthAnalysisLogId?: string, sessionData?: any): Promise<GeneratedLetter> {
-  const letterId = `letter:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
+  const letterId = `letter:${Date.now()}:${Math.random().toString(36).substring(2, 11)}`;
   
   const letterRecord: GeneratedLetter = {
     id: letterId,
@@ -856,7 +856,7 @@ export async function getAllGeneratedLetters(userId: string): Promise<GeneratedL
 
 // Reflection Hints 관련 함수들
 export async function saveReflectionHints(sessionId: string, characterName: string, highlightedData: HighlightedItem[], generatedHints: string[]): Promise<ReflectionHints> {
-  const hintsId = `hints:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
+  const hintsId = `hints:${Date.now()}:${Math.random().toString(36).substring(2, 11)}`;
   
   const hintsRecord: ReflectionHints = {
     id: hintsId,
@@ -917,7 +917,7 @@ export async function saveWritingStepData(sessionId: string, stepType: 'understa
     }));
     
     const stepData: WritingStepData = {
-      id: `${stepType}_step:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`,
+      id: `${stepType}_step:${Date.now()}:${Math.random().toString(36).substring(2, 11)}`,
       sessionId,
       stepType,
       highlightedItems: cleanHighlightedItems,
@@ -1124,7 +1124,7 @@ export async function updateReflectionItem(reflectionId: string, sessionId: stri
       const sessionData = await getReflectionSessionData(sessionId);
       if (sessionData) {
         const updatedHistoryIds = [...(sessionData.metadata.historyIds || []), historyId];
-        await saveReflectionSessionMetadata(sessionId, sessionData.metadata.selectedHintTags, sessionData.metadata.allGeneratedHints, updatedHistoryIds);
+        await saveReflectionSessionMetadata(sessionId, sessionData.metadata.selectedFactors, sessionData.metadata.allGeneratedHints, updatedHistoryIds);
       }
     }
     
@@ -1136,32 +1136,32 @@ export async function updateReflectionItem(reflectionId: string, sessionId: stri
 }
 
 // Update session metadata on all reflection items
-export async function saveReflectionSessionMetadata(sessionId: string, selectedHintTags: any[], allGeneratedHints: string[], historyIds: string[] = []): Promise<void> {
+export async function saveReflectionSessionMetadata(sessionId: string, selectedHintData: any[], allGeneratedHints: string[], historyIds: string[] = []): Promise<void> {
   try {
     const cleanSessionId = sessionId.replace(/^session:/, '');
     
     // Get all reflection items for this session
     const itemKeys = await redis.keys(`session_reflection:${cleanSessionId}:*`);
     
-    // Transform selectedHintTags and selectedFactors
-    const transformedTags = selectedHintTags.flatMap(item => {
-      if (item && typeof item === 'object' && 'tags' in item) {
-        return item.tags || [];
-      }
-      return item || [];
-    });
-    
-    const transformedFactors = selectedHintTags.flatMap(item => {
+    // Transform selectedHintData into factors and hints
+    const transformedFactors = selectedHintData.flatMap(item => {
       if (item && typeof item === 'object' && 'selectedFactors' in item) {
         return item.selectedFactors || [];
       }
       return [];
     });
     
+    const transformedHints = selectedHintData.flatMap(item => {
+      if (item && typeof item === 'object' && 'selectedHints' in item) {
+        return item.selectedHints || [];
+      }
+      return [];
+    });
+    
     // Update metadata on all reflection items
     const metadataUpdate = {
-      selectedHintTags: JSON.stringify(transformedTags),
       selectedFactors: JSON.stringify(transformedFactors),
+      selectedHints: JSON.stringify(transformedHints),
       allGeneratedHints: JSON.stringify(allGeneratedHints),
       historyIds: JSON.stringify(historyIds),
       updatedAt: new Date().toISOString()
@@ -1185,8 +1185,8 @@ export async function getReflectionSessionData(sessionId: string): Promise<{item
     const itemKeys = await redis.keys(`session_reflection:${cleanSessionId}:*`);
     const items: ReflectionItem[] = [];
     let metadata = {
-      selectedHintTags: [],
       selectedFactors: [],
+      selectedHints: [],
       allGeneratedHints: [],
       historyIds: []
     };
@@ -1203,8 +1203,8 @@ export async function getReflectionSessionData(sessionId: string): Promise<{item
           const itemHash = await redis.hgetall(itemKey);
           if (itemHash && Object.keys(itemHash).length > 0) {
             metadata = {
-              selectedHintTags: itemHash.selectedHintTags ? safeJSONParse(itemHash.selectedHintTags as string, []) : [],
               selectedFactors: itemHash.selectedFactors ? safeJSONParse(itemHash.selectedFactors as string, []) : [],
+              selectedHints: itemHash.selectedHints ? safeJSONParse(itemHash.selectedHints as string, []) : [],
               allGeneratedHints: itemHash.allGeneratedHints ? safeJSONParse(itemHash.allGeneratedHints as string, []) : [],
               historyIds: itemHash.historyIds ? safeJSONParse(itemHash.historyIds as string, []) : []
             };
@@ -1221,7 +1221,7 @@ export async function getReflectionSessionData(sessionId: string): Promise<{item
 }
 
 // 기존 호환성을 위한 함수들 - 새 구조로 변환
-export async function saveReflectionStepData(sessionId: string, reflectionItems: ReflectionItem[], selectedHintTags: Array<{reflectionId: string; tags: string[]}>, allGeneratedHints: string[]): Promise<any[]> {
+export async function saveReflectionStepData(sessionId: string, reflectionItems: ReflectionItem[], selectedHintData: Array<{reflectionId: string; selectedFactors: string[]; selectedHints: string[]}>, allGeneratedHints: string[]): Promise<any[]> {
   try {
     // Clean reflection items and remove legacy fields
     const cleanedReflectionItems = cleanReflectionItems(reflectionItems);
@@ -1295,7 +1295,7 @@ export async function saveReflectionStepData(sessionId: string, reflectionItems:
     }
     
     // Save session metadata
-    await saveReflectionSessionMetadata(sessionId, selectedHintTags, allGeneratedHints, allHistoryIds);
+    await saveReflectionSessionMetadata(sessionId, selectedHintData, allGeneratedHints, allHistoryIds);
     
     return processedItems;
   } catch (error) {
@@ -1332,8 +1332,8 @@ export async function getReflectionStepData(sessionId: string): Promise<any[]> {
 }
 
 // 버전 관리 기능 제거 - saveReflectionStepData와 동일하게 작동
-export async function saveReflectionStepDataWithVersioning(sessionId: string, reflectionItems: ReflectionItem[], selectedHintTags: Array<{reflectionId: string; tags: string[]}>, allGeneratedHints: string[]): Promise<any[]> {
-  return saveReflectionStepData(sessionId, reflectionItems, selectedHintTags, allGeneratedHints);
+export async function saveReflectionStepDataWithVersioning(sessionId: string, reflectionItems: ReflectionItem[], selectedHintData: Array<{reflectionId: string; selectedFactors: string[]; selectedHints: string[]}>, allGeneratedHints: string[]): Promise<any[]> {
+  return saveReflectionStepData(sessionId, reflectionItems, selectedHintData, allGeneratedHints);
 }
 
 export async function getAllReflectionStepVersions(sessionId: string): Promise<any[]> {
@@ -1346,12 +1346,8 @@ export async function getAllReflectionStepVersions(sessionId: string): Promise<a
 // Save reflection item history - returns historyId for tracking
 async function saveReflectionItemHistory(reflectionId: string, currentData: any, action: string): Promise<string | null> {
   try {
-    console.log(`=== SAVING HISTORY for ${reflectionId} ===`);
-    console.log('Current data:', currentData);
-    console.log('Action:', action);
-    
     const timestamp = new Date().toISOString();
-    const historyId = `history:${reflectionId}:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
+    const historyId = `history:${reflectionId}:${Date.now()}:${Math.random().toString(36).substring(2, 11)}`;
     
     // Store history with same key structure as session_reflection
     const historyData = {
@@ -1552,7 +1548,7 @@ export async function saveInspectionData(sessionId: string, inspectionResults: A
             const sessionData = await getReflectionSessionData(cleanSessionId);
             if (sessionData) {
               const updatedHistoryIds = [...(sessionData.metadata.historyIds || []), historyId];
-              await saveReflectionSessionMetadata(cleanSessionId, sessionData.metadata.selectedHintTags, sessionData.metadata.allGeneratedHints, updatedHistoryIds);
+              await saveReflectionSessionMetadata(cleanSessionId, sessionData.metadata.selectedFactors, sessionData.metadata.allGeneratedHints, updatedHistoryIds);
             }
           }
         }
@@ -1655,7 +1651,7 @@ export async function getInspectionData(sessionId: string): Promise<InspectionDa
 
 // Suggestion Data functions
 export async function saveSuggestionData(sessionId: string, suggestionResults: Array<{reflectionId: string; warningText?: string; environmentalFactors: string[]}>, allGeneratedFactors: string[]): Promise<SuggestionData> {
-  const suggestionDataId = `suggestion:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
+  const suggestionDataId = `suggestion:${Date.now()}:${Math.random().toString(36).substring(2, 11)}`;
   
   const suggestionData: SuggestionData = {
     id: suggestionDataId,
@@ -1688,7 +1684,7 @@ export async function getSuggestionData(sessionId: string): Promise<SuggestionDa
 
 // Letter Content Data functions
 export async function saveLetterContentData(sessionId: string, letterContent: string, strengthKeywords: string[]): Promise<LetterContentData> {
-  const letterContentDataId = `letter_content:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
+  const letterContentDataId = `letter_content:${Date.now()}:${Math.random().toString(36).substring(2, 11)}`;
   
   const letterContentData: LetterContentData = {
     id: letterContentDataId,
@@ -1722,7 +1718,7 @@ export async function getLetterContentData(sessionId: string): Promise<LetterCon
 
 // Solution Exploration Data functions
 export async function saveSolutionExplorationData(sessionId: string, solutionsByReflection: any[]): Promise<SolutionExplorationData> {
-  const solutionDataId = `solution_exploration:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
+  const solutionDataId = `session_solution_exploration:${sessionId}`;
   
   const solutionData: SolutionExplorationData = {
     id: solutionDataId,
@@ -1732,29 +1728,36 @@ export async function saveSolutionExplorationData(sessionId: string, solutionsBy
     createdAt: new Date().toISOString()
   };
 
-  await redis.set(solutionDataId, JSON.stringify(solutionData));
-  await redis.set(`session_solution_exploration:${sessionId}`, solutionDataId);
+  // Store data directly as hash in session_solution_exploration
+  await redis.hset(solutionDataId, {
+    id: solutionData.id,
+    sessionId: solutionData.sessionId,
+    solutionsByReflection: JSON.stringify(solutionData.solutionsByReflection),
+    completedAt: solutionData.completedAt,
+    createdAt: solutionData.createdAt
+  });
   
   return solutionData;
 }
 
 export async function getSolutionExplorationData(sessionId: string): Promise<SolutionExplorationData | null> {
-  const solutionDataId = await redis.get(`session_solution_exploration:${sessionId}`);
-  if (!solutionDataId) return null;
+  const solutionDataId = `session_solution_exploration:${sessionId}`;
   
-  const solutionData = await redis.get(solutionDataId as string);
-  if (!solutionData) return null;
+  const solutionHash = await redis.hgetall(solutionDataId);
+  if (!solutionHash || Object.keys(solutionHash).length === 0) return null;
   
-  if (typeof solutionData === 'object') {
-    return solutionData as SolutionExplorationData;
-  }
-  
-  return JSON.parse(solutionData as string) as SolutionExplorationData;
+  return {
+    id: solutionHash.id as string,
+    sessionId: solutionHash.sessionId as string,
+    solutionsByReflection: safeJSONParse(solutionHash.solutionsByReflection as string, []),
+    completedAt: solutionHash.completedAt as string,
+    createdAt: solutionHash.createdAt as string
+  };
 }
 
 // AI Strength Tags Data functions
 export async function saveAIStrengthTagsData(sessionId: string, strengthTagsByReflection: any[]): Promise<AIStrengthTagsData> {
-  const strengthTagsDataId = `ai_strength_tags:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
+  const strengthTagsDataId = `ai_strength_tags:${Date.now()}:${Math.random().toString(36).substring(2, 11)}`;
   
   const strengthTagsData: AIStrengthTagsData = {
     id: strengthTagsDataId,
@@ -1763,29 +1766,41 @@ export async function saveAIStrengthTagsData(sessionId: string, strengthTagsByRe
     createdAt: new Date().toISOString()
   };
 
-  await redis.set(strengthTagsDataId, JSON.stringify(strengthTagsData));
-  await redis.set(`session_ai_strength_tags:${sessionId}`, strengthTagsDataId);
+  // Store data as hash instead of JSON string
+  await redis.hset(strengthTagsDataId, {
+    id: strengthTagsData.id,
+    sessionId: strengthTagsData.sessionId,
+    strengthTagsByReflection: JSON.stringify(strengthTagsData.strengthTagsByReflection),
+    createdAt: strengthTagsData.createdAt
+  });
   
   return strengthTagsData;
 }
 
 export async function getAIStrengthTagsData(sessionId: string): Promise<AIStrengthTagsData | null> {
-  const strengthTagsDataId = await redis.get(`session_ai_strength_tags:${sessionId}`);
-  if (!strengthTagsDataId) return null;
+  // Search through ai_strength_tags entries to find matching sessionId
+  const strengthTagsKeys = await redis.keys('ai_strength_tags:*');
   
-  const strengthTagsData = await redis.get(strengthTagsDataId as string);
-  if (!strengthTagsData) return null;
-  
-  if (typeof strengthTagsData === 'object') {
-    return strengthTagsData as AIStrengthTagsData;
+  for (const key of strengthTagsKeys) {
+    const strengthTagsHash = await redis.hgetall(key);
+    if (!strengthTagsHash || Object.keys(strengthTagsHash).length === 0) continue;
+    
+    if (strengthTagsHash.sessionId === sessionId) {
+      return {
+        id: strengthTagsHash.id as string,
+        sessionId: strengthTagsHash.sessionId as string,
+        strengthTagsByReflection: safeJSONParse(strengthTagsHash.strengthTagsByReflection as string, []),
+        createdAt: strengthTagsHash.createdAt as string
+      };
+    }
   }
   
-  return JSON.parse(strengthTagsData as string) as AIStrengthTagsData;
+  return null;
 }
 
 // Magic Mix Interaction Data functions
 export async function saveMagicMixInteractionData(sessionId: string, interactions: any[], totalMixCount: number, totalSolutionsAdded: number): Promise<MagicMixInteractionData> {
-  const mixDataId = `magic_mix:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
+  const mixDataId = `magic_mix:${Date.now()}:${Math.random().toString(36).substring(2, 11)}`;
   
   const mixData: MagicMixInteractionData = {
     id: mixDataId,
@@ -1797,54 +1812,64 @@ export async function saveMagicMixInteractionData(sessionId: string, interaction
     updatedAt: new Date().toISOString()
   };
 
-  await redis.set(mixDataId, JSON.stringify(mixData));
-  await redis.set(`session_magic_mix:${sessionId}`, mixDataId);
+  // Store data as hash instead of JSON string
+  await redis.hset(mixDataId, {
+    id: mixData.id,
+    sessionId: mixData.sessionId,
+    interactions: JSON.stringify(mixData.interactions),
+    totalMixCount: mixData.totalMixCount.toString(),
+    totalSolutionsAdded: mixData.totalSolutionsAdded.toString(),
+    createdAt: mixData.createdAt,
+    updatedAt: mixData.updatedAt
+  });
   
   return mixData;
 }
 
 export async function getMagicMixInteractionData(sessionId: string): Promise<MagicMixInteractionData | null> {
-  const mixDataId = await redis.get(`session_magic_mix:${sessionId}`);
-  if (!mixDataId) return null;
+  // Search through magic_mix entries to find matching sessionId
+  const mixDataKeys = await redis.keys('magic_mix:*');
   
-  const mixData = await redis.get(mixDataId as string);
-  if (!mixData) return null;
-  
-  if (typeof mixData === 'object') {
-    return mixData as MagicMixInteractionData;
+  for (const key of mixDataKeys) {
+    const mixDataHash = await redis.hgetall(key);
+    if (!mixDataHash || Object.keys(mixDataHash).length === 0) continue;
+    
+    if (mixDataHash.sessionId === sessionId) {
+      return {
+        id: mixDataHash.id as string,
+        sessionId: mixDataHash.sessionId as string,
+        interactions: safeJSONParse(mixDataHash.interactions as string, []),
+        totalMixCount: parseInt(mixDataHash.totalMixCount as string) || 0,
+        totalSolutionsAdded: parseInt(mixDataHash.totalSolutionsAdded as string) || 0,
+        createdAt: mixDataHash.createdAt as string,
+        updatedAt: mixDataHash.updatedAt as string
+      };
+    }
   }
   
-  return JSON.parse(mixData as string) as MagicMixInteractionData;
+  return null;
 }
 
 export async function updateMagicMixInteractionData(sessionId: string, interactions: any[], totalMixCount: number, totalSolutionsAdded: number): Promise<void> {
-  const mixDataId = await redis.get(`session_magic_mix:${sessionId}`);
-  if (!mixDataId) {
+  // Get existing data using the new search method
+  const existingData = await getMagicMixInteractionData(sessionId);
+  if (!existingData) {
     await saveMagicMixInteractionData(sessionId, interactions, totalMixCount, totalSolutionsAdded);
     return;
   }
   
-  const mixData = await redis.get(mixDataId as string);
-  if (!mixData) return;
-  
-  let currentData: MagicMixInteractionData;
-  if (typeof mixData === 'object') {
-    currentData = mixData as MagicMixInteractionData;
-  } else {
-    currentData = JSON.parse(mixData as string) as MagicMixInteractionData;
-  }
-  
-  currentData.interactions = interactions;
-  currentData.totalMixCount = totalMixCount;
-  currentData.totalSolutionsAdded = totalSolutionsAdded;
-  currentData.updatedAt = new Date().toISOString();
-  
-  await redis.set(mixDataId as string, JSON.stringify(currentData));
+  // Update the existing data in hash format
+  await redis.hset(existingData.id, {
+    interactions: JSON.stringify(interactions),
+    totalMixCount: totalMixCount.toString(),
+    totalSolutionsAdded: totalSolutionsAdded.toString(),
+    updatedAt: new Date().toISOString()
+  });
 }
 
 // Response Letter Data functions
 export async function saveResponseLetterData(sessionId: string, originalGeneratedLetter: string, finalEditedLetter: string, characterName: string, userNickname: string, generatedAt: string, letterId?: string): Promise<ResponseLetterData> {
-  const responseLetterDataId = `response_letter:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
+  const responseLetterDataId = `response_letter:${Date.now()}:${Math.random().toString(36).substring(2, 11)}`;
   
   const responseLetterData: ResponseLetterData = {
     id: responseLetterDataId,
@@ -1858,7 +1883,19 @@ export async function saveResponseLetterData(sessionId: string, originalGenerate
     createdAt: new Date().toISOString()
   };
 
-  await redis.set(responseLetterDataId, JSON.stringify(responseLetterData));
+  // Store data as hash instead of JSON string
+  await redis.hset(responseLetterDataId, {
+    id: responseLetterData.id,
+    sessionId: responseLetterData.sessionId,
+    originalGeneratedLetter: responseLetterData.originalGeneratedLetter,
+    finalEditedLetter: responseLetterData.finalEditedLetter,
+    characterName: responseLetterData.characterName,
+    userNickname: responseLetterData.userNickname,
+    generatedAt: responseLetterData.generatedAt,
+    finalizedAt: responseLetterData.finalizedAt,
+    createdAt: responseLetterData.createdAt
+  });
+  
   await redis.set(`session_response_letter:${sessionId}`, responseLetterDataId);
   
   // 편지별 답장 데이터 연결 추가
@@ -1873,14 +1910,20 @@ export async function getResponseLetterData(sessionId: string): Promise<Response
   const responseLetterDataId = await redis.get(`session_response_letter:${sessionId}`);
   if (!responseLetterDataId) return null;
   
-  const responseLetterData = await redis.get(responseLetterDataId as string);
-  if (!responseLetterData) return null;
+  const responseLetterHash = await redis.hgetall(responseLetterDataId as string);
+  if (!responseLetterHash || Object.keys(responseLetterHash).length === 0) return null;
   
-  if (typeof responseLetterData === 'object') {
-    return responseLetterData as ResponseLetterData;
-  }
-  
-  return JSON.parse(responseLetterData as string) as ResponseLetterData;
+  return {
+    id: responseLetterHash.id as string,
+    sessionId: responseLetterHash.sessionId as string,
+    originalGeneratedLetter: responseLetterHash.originalGeneratedLetter as string,
+    finalEditedLetter: responseLetterHash.finalEditedLetter as string,
+    characterName: responseLetterHash.characterName as string,
+    userNickname: responseLetterHash.userNickname as string,
+    generatedAt: responseLetterHash.generatedAt as string,
+    finalizedAt: responseLetterHash.finalizedAt as string,
+    createdAt: responseLetterHash.createdAt as string
+  };
 }
 
 // 편지별 답장 데이터 조회 함수
@@ -1888,14 +1931,20 @@ export async function getResponseLetterByLetter(letterId: string): Promise<Respo
   const responseLetterDataId = await redis.get(`letter_response:${letterId}`);
   if (!responseLetterDataId) return null;
   
-  const responseLetterData = await redis.get(responseLetterDataId as string);
-  if (!responseLetterData) return null;
+  const responseLetterHash = await redis.hgetall(responseLetterDataId as string);
+  if (!responseLetterHash || Object.keys(responseLetterHash).length === 0) return null;
   
-  if (typeof responseLetterData === 'object') {
-    return responseLetterData as ResponseLetterData;
-  }
-  
-  return JSON.parse(responseLetterData as string) as ResponseLetterData;
+  return {
+    id: responseLetterHash.id as string,
+    sessionId: responseLetterHash.sessionId as string,
+    originalGeneratedLetter: responseLetterHash.originalGeneratedLetter as string,
+    finalEditedLetter: responseLetterHash.finalEditedLetter as string,
+    characterName: responseLetterHash.characterName as string,
+    userNickname: responseLetterHash.userNickname as string,
+    generatedAt: responseLetterHash.generatedAt as string,
+    finalizedAt: responseLetterHash.finalizedAt as string,
+    createdAt: responseLetterHash.createdAt as string
+  };
 }
 
 // letterId 기반 writing 로그 조회 함수
@@ -2068,7 +2117,7 @@ export async function getWritingLogsByLetter(letterId: string): Promise<{
 
 // ===== UnderstandingSession 관련 함수들 =====
 export async function createUnderstandingSession(letterId: string, highlightedItems: CleanHighlightedItem[]): Promise<UnderstandingSession> {
-  const understandingSessionId = `understanding_session:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
+  const understandingSessionId = `understanding_session:${Date.now()}:${Math.random().toString(36).substring(2, 11)}`;
   
   const now = new Date().toISOString();
   const session: UnderstandingSession = {
@@ -2132,7 +2181,7 @@ export async function updateUnderstandingSession(understandingSessionId: string,
 
 // ===== StrengthFindingSession 관련 함수들 =====
 export async function createStrengthFindingSession(letterId: string, highlightedItems: CleanStrengthItem[]): Promise<StrengthFindingSession> {
-  const strengthFindingSessionId = `strength_finding_session:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
+  const strengthFindingSessionId = `strength_finding_session:${Date.now()}:${Math.random().toString(36).substring(2, 11)}`;
   
   const now = new Date().toISOString();
   const session: StrengthFindingSession = {
@@ -2226,17 +2275,17 @@ export async function createOrUpdateStrengthFindingSession(sessionId: string, hi
   }
 }
 
-// Reflection Support Keywords 관련 함수들
-export async function saveReflectionSupportKeywords(userId: string, newKeywords: string[]): Promise<ReflectionSupportKeywords> {
+// Reflection Support Hints 관련 함수들
+export async function saveReflectionSupportHints(userId: string, newKeywords: string[]): Promise<ReflectionSupportHints> {
   try {
     // 기존 키워드 데이터 가져오기
-    const existingData = await getReflectionSupportKeywords(userId);
+    const existingData = await getReflectionSupportHints(userId);
     
     if (existingData) {
       // 기존 데이터가 있으면 새로운 키워드 배열을 추가
       const updatedKeywords = [...existingData.keywords, newKeywords]; // 2차원 배열에 새 배열 추가
       
-      const updatedData: ReflectionSupportKeywords = {
+      const updatedData: ReflectionSupportHints = {
         ...existingData,
         keywords: updatedKeywords
       };
@@ -2249,9 +2298,9 @@ export async function saveReflectionSupportKeywords(userId: string, newKeywords:
       return updatedData;
     } else {
       // 새로운 데이터 생성
-      const keywordId = `reflection_support_keywords:${Date.now()}:${Math.random().toString(36).substr(2, 9)}`;
+      const keywordId = `reflection_hints:${Date.now()}:${Math.random().toString(36).substring(2, 11)}`;
       
-      const keywordData: ReflectionSupportKeywords = {
+      const keywordData: ReflectionSupportHints = {
         id: keywordId,
         userId,
         keywords: [newKeywords], // 첫 번째 키워드 배열을 2차원 배열로 감싸기
@@ -2274,10 +2323,10 @@ export async function saveReflectionSupportKeywords(userId: string, newKeywords:
   }
 }
 
-export async function getReflectionSupportKeywords(userId: string): Promise<ReflectionSupportKeywords | null> {
+export async function getReflectionSupportHints(userId: string): Promise<ReflectionSupportHints | null> {
   try {
-    // 모든 reflection_support_keywords:* 키들을 찾아서 userId로 필터링
-    const keywordKeys = await redis.keys('reflection_support_keywords:*');
+    // 모든 reflection_hints:* 키들을 찾아서 userId로 필터링
+    const keywordKeys = await redis.keys('reflection_hints:*');
     
     for (const keywordKey of keywordKeys) {
       const keywordData = await redis.hgetall(keywordKey);
@@ -2317,16 +2366,10 @@ export async function getReflectionSupportKeywords(userId: string): Promise<Refl
 // Save completion history - called when user completes a reflection
 export async function saveCompletionHistory(reflectionId: string, sessionId: string, action: string = 'completed'): Promise<string | null> {
   try {
-    console.log(`=== SAVING COMPLETION HISTORY for ${reflectionId} ===`);
-    console.log('Session ID:', sessionId);
-    console.log('Action:', action);
-    
     // Clean session ID (remove session: prefix if present)
     const cleanSessionId = sessionId.replace(/^session:/, '');
-    console.log('Cleaned session ID:', cleanSessionId);
     
     // Get current reflection item state using the new structure
-    console.log('Getting current reflection item state...');
     const currentItem = await getReflectionItem(reflectionId, cleanSessionId);
     
     if (!currentItem) {
@@ -2334,16 +2377,7 @@ export async function saveCompletionHistory(reflectionId: string, sessionId: str
       return null;
     }
     
-    console.log('Current item state captured:', {
-      id: currentItem.id,
-      inspectionStep: currentItem.inspectionStep,
-      hasEmotion: currentItem.emotionCheckResult?.hasEmotion,
-      hasBlamePattern: currentItem.blameCheckResult?.hasBlamePattern,
-      environmentalFactorsCount: currentItem.blameCheckResult?.environmentalFactors?.length
-    });
-    
     // Save current state as completion history
-    console.log('Saving history for item:', currentItem.id);
     const historyId = await saveReflectionItemHistory(reflectionId, currentItem, action);
     
     if (historyId) {
@@ -2351,7 +2385,7 @@ export async function saveCompletionHistory(reflectionId: string, sessionId: str
       const sessionData = await getReflectionSessionData(cleanSessionId);
       if (sessionData) {
         const updatedHistoryIds = [...(sessionData.metadata.historyIds || []), historyId];
-        await saveReflectionSessionMetadata(cleanSessionId, sessionData.metadata.selectedHintTags, sessionData.metadata.allGeneratedHints, updatedHistoryIds);
+        await saveReflectionSessionMetadata(cleanSessionId, sessionData.metadata.selectedFactors, sessionData.metadata.allGeneratedHints, updatedHistoryIds);
       }
       
       console.log(`Completion history saved successfully with ID: ${historyId}`);

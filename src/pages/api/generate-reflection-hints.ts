@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import OpenAI from 'openai';
-import { saveReflectionSupportKeywords } from '../../../lib/database';
+import { saveReflectionSupportHints } from '../../../lib/database';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -111,7 +111,7 @@ ${highlightSummary}
     // 키워드를 데이터베이스에 저장 (userId가 있는 경우에만)
     if (userId && hints.length > 0) {
       try {
-        await saveReflectionSupportKeywords(userId, hints.slice(0, 7));
+        await saveReflectionSupportHints(userId, hints.slice(0, 7));
         console.log('Keywords saved to database for user:', userId);
       } catch (saveError) {
         console.error('Error saving keywords to database:', saveError);

@@ -7,12 +7,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { sessionId, reflectionItems, selectedHintTags, allGeneratedHints } = req.body;
+    const { sessionId, reflectionItems, selectedHintTags, selectedFactors, selectedHints, allGeneratedHints } = req.body;
 
     console.log('Save reflection API called with:');
     console.log('- sessionId:', sessionId);
     console.log('- reflectionItems count:', reflectionItems?.length);
-    console.log('- selectedHintTags:', JSON.stringify(selectedHintTags, null, 2));
+    console.log('- selectedHintTags (legacy):', JSON.stringify(selectedHintTags, null, 2));
+    console.log('- selectedFactors:', JSON.stringify(selectedFactors, null, 2));
+    console.log('- selectedHints:', JSON.stringify(selectedHints, null, 2));
     console.log('- allGeneratedHints:', JSON.stringify(allGeneratedHints, null, 2));
     
     // Debug each reflection item's metadata
@@ -27,13 +29,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    if (!sessionId || !reflectionItems || !selectedHintTags || !allGeneratedHints) {
+    if (!sessionId || !reflectionItems || !allGeneratedHints) {
       return res.status(400).json({ 
-        message: 'Missing required fields: sessionId, reflectionItems, selectedHintTags, allGeneratedHints' 
+        message: 'Missing required fields: sessionId, reflectionItems, allGeneratedHints' 
       });
     }
+    
+    // Transform hint data for database storage - support both legacy and new format
+    let selectedHintData = [];
+    
+    if (selectedFactors && selectedHints) {
+      // New format: separate factors and hints
+      selectedHintData = reflectionItems.map(item => ({
+        reflectionId: item.id,
+        selectedFactors: selectedFactors[item.id] || [],
+        selectedHints: selectedHints[item.id] || []
+      }));
+    } else if (selectedHintTags) {
+      // Legacy format: convert selectedHintTags to factors/hints split
+      selectedHintData = selectedHintTags.map(item => ({
+        reflectionId: item.reflectionId,
+        selectedFactors: item.tags || [], // For now, treat all as factors until we have proper categorization
+        selectedHints: []
+      }));
+    } else {
+      selectedHintData = [];
+    }
 
-    const reflectionData = await saveReflectionStepDataWithVersioning(sessionId, reflectionItems, selectedHintTags, allGeneratedHints);
+    const reflectionData = await saveReflectionStepDataWithVersioning(sessionId, reflectionItems, selectedHintData, allGeneratedHints);
 
     res.status(200).json({ 
       message: 'Reflection step data saved successfully',

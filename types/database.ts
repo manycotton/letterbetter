@@ -49,8 +49,8 @@ export interface UnderstandingSession {
   updatedAt: string;
 }
 
-// Reflection Support Keywords 인터페이스
-export interface ReflectionSupportKeywords {
+// Reflection Support Hints 인터페이스
+export interface ReflectionSupportHints {
   id: string;
   userId: string;
   keywords: string[][]; // 2차원 배열: 각 새로고침마다 별도 배열로 저장

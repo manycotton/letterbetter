@@ -45,24 +45,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           await redis.del(`session_reflection:${sessionId}`);
         }
         
-        // Magic mix 데이터 삭제
-        const magicMixId = await redis.get(`session_magic_mix:${sessionId}`);
-        if (magicMixId) {
-          await redis.del(magicMixId as string);
-          await redis.del(`session_magic_mix:${sessionId}`);
+        // Magic mix 데이터 삭제 (hash storage에서 sessionId로 검색)
+        const magicMixKeys = await redis.keys('magic_mix:*');
+        for (const key of magicMixKeys) {
+          const mixData = await redis.hgetall(key);
+          if (mixData && mixData.sessionId === sessionId) {
+            await redis.del(key);
+          }
         }
         
-        // Response letter 데이터 삭제
-        const responseLetterKeys = await redis.keys(`response_letter:*:${sessionId}`);
-        for (const key of responseLetterKeys) {
-          await redis.del(key);
+        // AI strength tags 데이터 삭제 (hash storage에서 sessionId로 검색)
+        const aiStrengthKeys = await redis.keys('ai_strength_tags:*');
+        for (const key of aiStrengthKeys) {
+          const strengthData = await redis.hgetall(key);
+          if (strengthData && strengthData.sessionId === sessionId) {
+            await redis.del(key);
+          }
         }
         
-        // Reflection hints 삭제
-        const hintsKeys = await redis.keys(`reflection_hints:${sessionId}:*`);
-        for (const key of hintsKeys) {
-          await redis.del(key);
+        // Response letter 데이터 삭제 (hash storage)
+        const responseLetterDataId = await redis.get(`session_response_letter:${sessionId}`);
+        if (responseLetterDataId) {
+          await redis.del(responseLetterDataId as string);
+          await redis.del(`session_response_letter:${sessionId}`);
         }
+        
+        // Solution exploration 데이터 삭제
+        await redis.del(`session_solution_exploration:${sessionId}`);
         
       } catch (sessionError) {
         console.error(`Error deleting session ${sessionId}:`, sessionError);
@@ -84,10 +93,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       await redis.del(key);
     }
     
+    // 사용자 관련 Letter 데이터 삭제 (새로운 Letter 구조)
+    const newLetterKeys = await redis.keys(`letter:*`);
+    for (const key of newLetterKeys) {
+      const letterData = await redis.hgetall(key);
+      if (letterData && letterData.userId === userId) {
+        // letter_response 매핑 삭제
+        await redis.del(`letter_response:${letterData.letterId}`);
+        // Letter 자체 삭제
+        await redis.del(key);
+      }
+    }
+    
     // 사용자 관련 강점 분석 로그 삭제
     const strengthAnalysisKeys = await redis.keys(`strength_analysis:${userId}:*`);
     for (const key of strengthAnalysisKeys) {
       await redis.del(key);
+    }
+    
+    // 사용자 관련 reflection hints 삭제 (userId로 검색)
+    const reflectionHintsKeys = await redis.keys('reflection_hints:*');
+    for (const key of reflectionHintsKeys) {
+      const hintsData = await redis.hgetall(key);
+      if (hintsData && hintsData.userId === userId) {
+        await redis.del(key);
+      }
     }
 
     res.status(200).json({ 
