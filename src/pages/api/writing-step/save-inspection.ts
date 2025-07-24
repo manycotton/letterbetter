@@ -16,12 +16,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Debug log to see what's being sent
+    console.log('=== INSPECTION API START ===');
     console.log('Inspection API received data:', {
       sessionId,
       inspectionResults: JSON.stringify(inspectionResults, null, 2)
     });
 
+    console.log('About to call saveInspectionData...');
     const inspectionData = await saveInspectionData(sessionId, inspectionResults);
+    console.log('saveInspectionData completed, result:', inspectionData);
+    console.log('=== INSPECTION API END ===');
 
     res.status(200).json({ 
       message: 'Inspection data saved successfully',

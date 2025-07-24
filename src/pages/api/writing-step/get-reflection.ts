@@ -15,7 +15,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
+    console.log('=== GET REFLECTION API CALLED ===');
+    console.log('SessionId received:', sessionId);
+    
     const reflectionData = await getReflectionStepData(sessionId);
+    
+    console.log('=== REFLECTION DATA RETRIEVED ===');
+    console.log('Data keys:', reflectionData ? Object.keys(reflectionData) : 'null');
+    if (reflectionData && reflectionData.reflectionItems) {
+      console.log('Reflection items count:', reflectionData.reflectionItems.length);
+      reflectionData.reflectionItems.forEach((item: any, index: number) => {
+        console.log(`Item ${index} blameCheckResult:`, item.blameCheckResult);
+      });
+    }
 
     if (!reflectionData) {
       return res.status(404).json({ 

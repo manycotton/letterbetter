@@ -36,8 +36,6 @@ interface ReflectionItem {
   content: string;
   selectedHints?: string[]; // 선택된 힌트 태그들
   selectedFactors?: string[]; // 선택된 환경적 요인 태그들
-  keywords?: string[];
-  isLoadingKeywords?: boolean;
   inspectionStep?: number; // 0: 미시작, 1: 첫번째완료(감정제안), 2: 두번째완료(비난제안 또는 모든완료), 3: 모든검사완료
   emotionCheckResult?: {
     hasEmotion: boolean;
@@ -77,9 +75,7 @@ const Writing: React.FC = () => {
       id: Date.now().toString(), 
       content: '', 
       selectedHints: [],
-      selectedFactors: [],
-      keywords: [], 
-      isLoadingKeywords: false, 
+      selectedFactors: [], 
       inspectionStep: 0, 
       isProcessing: false,
       personalReflection: '',
@@ -92,7 +88,6 @@ const Writing: React.FC = () => {
     }
   ]);
   const [strengthItems, setStrengthItems] = useState<StrengthItem[]>([]);
-  const [selectedTags, setSelectedTags] = useState<{[itemId: string]: Array<{tag: string, type: 'keyword' | 'factor'}>}>({});
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
   
   // 생성된 편지 데이터
@@ -197,9 +192,7 @@ const Writing: React.FC = () => {
                   id: Date.now().toString(), 
                   content: '', 
                   selectedHints: [],
-                  selectedFactors: [],
-                  keywords: [], 
-                  isLoadingKeywords: false, 
+                  selectedFactors: [], 
                   inspectionStep: 0, 
                   isProcessing: false,
                   personalReflection: '',
@@ -219,15 +212,6 @@ const Writing: React.FC = () => {
               }));
               
               setReflectionItems(restoredReflectionItems);
-              
-              // selectedTags 복원
-              const restoredSelectedTags: {[itemId: string]: Array<{tag: string, type: 'keyword' | 'factor'}>} = {};
-              loadedReflectionItems.forEach((item: any) => {
-                if (item.selectedTags) {
-                  restoredSelectedTags[item.id] = item.selectedTags;
-                }
-              });
-              setSelectedTags(restoredSelectedTags);
               
               setCurrentStep(matchingSession.currentStep || 1);
               
@@ -436,7 +420,6 @@ const Writing: React.FC = () => {
           // 데이터베이스 저장용 reflectionItems 준비 (임시 상태 제거)
           const reflectionItemsForDB = reflectionItems.map(item => ({
             ...item,
-            selectedTags: selectedTags[item.id] || [],
             isLoadingKeywords: undefined,
             isProcessing: undefined,
             isLoadingAiSuggestions: undefined,
@@ -494,7 +477,7 @@ const Writing: React.FC = () => {
       const timeoutId = setTimeout(saveSession, 2000);
       return () => clearTimeout(timeoutId);
     }
-  }, [highlightedItems, strengthItems, reflectionItems, selectedTags, currentStep, currentUser, sessionId, isUnderstandingCompleted, isStrengthCompleted]);
+  }, [highlightedItems, strengthItems, reflectionItems, currentStep, currentUser, sessionId, isUnderstandingCompleted, isStrengthCompleted]);
 
   // 3단계 진입 시 고민 정리 힌트 자동 생성
   useEffect(() => {
@@ -659,8 +642,6 @@ const Writing: React.FC = () => {
       content: '',
       selectedHints: initialHint ? [initialHint] : [],
       selectedFactors: [],
-      keywords: [],
-      isLoadingKeywords: false,
       inspectionStep: 0,
       isProcessing: false,
       personalReflection: '',
@@ -737,29 +718,6 @@ const Writing: React.FC = () => {
     ));
   };
 
-  // 선택된 태그 제거
-  const removeSelectedTag = (itemId: string, tagToRemove: string) => {
-    setSelectedTags(prev => ({
-      ...prev,
-      [itemId]: (prev[itemId] || []).filter(item => item.tag !== tagToRemove)
-    }));
-    
-    // reflection input에서도 해당 태그 제거
-    const currentItem = reflectionItems.find(item => item.id === itemId);
-    if (currentItem) {
-      const newContent = currentItem.content.replace(new RegExp(`\\b${tagToRemove}\\b`, 'g'), '').replace(/\s+/g, ' ').trim();
-      updateReflectionItem(itemId, newContent);
-      
-      // textarea 높이도 업데이트
-      setTimeout(() => {
-        const textarea = document.querySelector(`textarea[data-item-id="${itemId}"]`) as HTMLTextAreaElement;
-        if (textarea) {
-          textarea.style.height = 'auto';
-          textarea.style.height = Math.max(40, textarea.scrollHeight) + 'px';
-        }
-      }, 0);
-    }
-  };
 
   // 고민 아이템 업데이트 함수
   const updateReflectionItem = (id: string, content: string) => {
@@ -982,17 +940,22 @@ const Writing: React.FC = () => {
 
       addLog(`감정: ${emotionResult?.hasEmotion ? 'true' : 'false'}, 비난: ${blameResult?.hasBlamePattern ? 'true' : 'false'}`);
 
-      // 둘 다 완료되면 inspectionStep 3으로 설정 (한 번에 다 보여주기)
-      setReflectionItems(prev => prev.map(item => 
+      // 검사 결과를 반영한 최신 reflection items 준비
+      const updatedReflectionItems = reflectionItems.map(item => 
         item.id === itemId 
           ? { 
               ...item, 
               inspectionStep: 3, 
               isProcessing: false, 
-              completedAt: new Date().toISOString() 
+              completedAt: new Date().toISOString(),
+              emotionCheckResult: emotionResult,
+              blameCheckResult: blameResult
             }
           : item
-      ));
+      );
+
+      // 상태 업데이트
+      setReflectionItems(updatedReflectionItems);
 
       // Save inspection data to database
       try {
@@ -1027,23 +990,27 @@ const Writing: React.FC = () => {
           
           if (!inspectionResponse.ok) {
             console.error('Failed to save inspection data:', await inspectionResponse.json());
+          } else {
+            const responseData = await inspectionResponse.json();
+            console.log('Inspection data saved successfully:', responseData);
           }
         }
       } catch (error) {
         console.error('Error saving inspection data:', error);
       }
 
-      // Save reflection step data immediately after completion
+      // Save reflection step data with updated inspection results
       try {
         if (sessionId) {
-          const selectedHintTags = reflectionItems.map(item => ({
+          const selectedHintTags = updatedReflectionItems.map(item => ({
             reflectionId: item.id,
-            tags: item.selectedHints || []
+            tags: item.selectedHints || [],
+            selectedFactors: item.selectedFactors || []
           }));
           
           const allGeneratedHints = reflectionHints;
           
-          const formattedReflectionItems = reflectionItems.map(item => ({
+          const formattedReflectionItems = updatedReflectionItems.map(item => ({
             ...item,
             createdAt: item.createdAt || new Date().toISOString(),
             updatedAt: item.updatedAt || new Date().toISOString()
@@ -1070,6 +1037,33 @@ const Writing: React.FC = () => {
         }
       } catch (error) {
         console.error('Error saving reflection data:', error);
+      }
+
+      // Save completion history after reflection data is saved
+      try {
+        if (sessionId) {
+          console.log('Saving completion history for reflection:', itemId);
+          const completionResponse = await fetch('/api/writing-step/save-completion', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              sessionId,
+              reflectionId: itemId,
+              action: 'completed'
+            })
+          });
+          
+          if (!completionResponse.ok) {
+            console.error('Failed to save completion history:', await completionResponse.json());
+          } else {
+            const completionData = await completionResponse.json();
+            console.log('Completion history saved successfully:', completionData);
+          }
+        }
+      } catch (error) {
+        console.error('Error saving completion history:', error);
       }
 
     } catch (error) {
@@ -1219,7 +1213,8 @@ const Writing: React.FC = () => {
         // environmental factors 업데이트 전 상태를 히스토리에 저장
         const selectedHintTags = reflectionItems.map(item => ({
           reflectionId: item.id,
-          tags: item.selectedTags || []
+          tags: item.selectedHints || [],
+          selectedFactors: item.selectedFactors || []
         }));
         const allGeneratedHints = reflectionHints;
         
@@ -1265,7 +1260,8 @@ const Writing: React.FC = () => {
         try {
           const selectedHintTags = updatedItems.map(item => ({
             reflectionId: item.id,
-            tags: item.selectedTags || []
+            tags: item.selectedHints || [],
+            selectedFactors: item.selectedFactors || []
           }));
           const allGeneratedHints = reflectionHints;
           
@@ -1281,6 +1277,27 @@ const Writing: React.FC = () => {
               allGeneratedHints
             }),
           });
+          
+          // Save inspection refresh history
+          console.log('Saving inspection refresh history for reflection:', itemId);
+          const refreshResponse = await fetch('/api/writing-step/save-completion', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              sessionId,
+              reflectionId: itemId,
+              action: 'inspection_refreshed'
+            })
+          });
+          
+          if (!refreshResponse.ok) {
+            console.error('Failed to save inspection refresh history:', await refreshResponse.json());
+          } else {
+            const refreshData = await refreshResponse.json();
+            console.log('Inspection refresh history saved successfully:', refreshData);
+          }
           
           console.log('Reflection saved after environmental factors regeneration');
         } catch (error) {
@@ -1848,6 +1865,7 @@ const Writing: React.FC = () => {
           // Filter and format reflection items for database
           const formattedReflectionItems = validReflectionItems.map(item => ({
             ...item,
+            solutionIds: (item.solutionInputs || []).map(solution => solution.id),
             createdAt: item.createdAt || new Date().toISOString(),
             updatedAt: item.updatedAt || new Date().toISOString()
           }));
@@ -2393,25 +2411,6 @@ const Writing: React.FC = () => {
                       />
                     </div>
                     
-                    {/* 선택된 태그 표시 */}
-                    {selectedTags[item.id] && selectedTags[item.id].length > 0 && (
-                      <div className={styles.selectedTagsContainer}>
-                        {selectedTags[item.id].map((tagItem, index) => (
-                          <span 
-                            key={index} 
-                            className={tagItem.type === 'keyword' ? styles.selectedKeywordTag : styles.selectedFactorTag}
-                          >
-                            {tagItem.tag}
-                            <button 
-                              onClick={() => removeSelectedTag(item.id, tagItem.tag)}
-                              className={styles.removeTagButton}
-                            >
-                              ×
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    )}
                     
 
                     {/* 검사 결과 표시 - 한 번에 모두 보여주기 */}

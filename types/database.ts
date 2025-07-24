@@ -118,18 +118,20 @@ export interface QAPair {
 
 export interface ReflectionItem {
   id: string;
+  sessionId: string;
   content: string;
-  keywords?: string[];
-  selectedTags?: Array<{tag: string, type: 'keyword' | 'factor'}>;
+  selectedHints?: string[];
+  selectedFactors?: string[];
   inspectionStep?: number;
   emotionCheckResult?: EmotionCheckResult;
   blameCheckResult?: BlameCheckResult;
   completedAt?: string;
   createdAt: string;
   updatedAt: string;
-  solutionContent?: string;
+  solutionIds?: string[];
   solutionCompleted?: boolean;
 }
+
 
 export interface EmotionCheckResult {
   hasEmotion: boolean;

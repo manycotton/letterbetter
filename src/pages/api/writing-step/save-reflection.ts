@@ -9,6 +9,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const { sessionId, reflectionItems, selectedHintTags, allGeneratedHints } = req.body;
 
+    console.log('Save reflection API called with:');
+    console.log('- sessionId:', sessionId);
+    console.log('- reflectionItems count:', reflectionItems?.length);
+    console.log('- selectedHintTags:', JSON.stringify(selectedHintTags, null, 2));
+    console.log('- allGeneratedHints:', JSON.stringify(allGeneratedHints, null, 2));
+    
+    // Debug each reflection item's metadata
+    if (reflectionItems && Array.isArray(reflectionItems)) {
+      reflectionItems.forEach((item, index) => {
+        console.log(`Reflection item ${index}:`, {
+          id: item.id,
+          hasContent: !!item.content,
+          selectedHints: item.selectedHints || [],
+          selectedFactors: item.selectedFactors || []
+        });
+      });
+    }
+
     if (!sessionId || !reflectionItems || !selectedHintTags || !allGeneratedHints) {
       return res.status(400).json({ 
         message: 'Missing required fields: sessionId, reflectionItems, selectedHintTags, allGeneratedHints' 
