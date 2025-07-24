@@ -1076,6 +1076,14 @@ const Writing: React.FC = () => {
     }
   };
 
+  // 솔루션 완료/수정 토글 함수
+  const toggleSolutionCompleted = (itemId: string) => {
+    setReflectionItems(prev => prev.map(item => 
+      item.id === itemId 
+        ? { ...item, solutionCompleted: !item.solutionCompleted }
+        : item
+    ));
+  };
 
   // 상황 요약 함수
   const summarizeSituation = async (content: string): Promise<string> => {
@@ -2004,7 +2012,9 @@ const Writing: React.FC = () => {
               sessionId,
               originalGeneratedLetter: result.letter,
               finalEditedLetter: result.letter, // initially same as original
-              characterName
+              characterName,
+              userNickname: currentUser?.nickname || '익명의 사용자',
+              generatedAt: new Date().toISOString()
             })
           });
         }
@@ -2264,7 +2274,7 @@ const Writing: React.FC = () => {
                       
                       <div className={styles.explanationSection}>
                         <label className={styles.explanationLabel}>
-                          🌟 이 강점이 어떤 상황에서 어떻게 잘 발휘될 수 있을까요?
+                          🌟 이 강점이 어떤 상황에서 잘 발휘될 수 있을까요?
                         </label>
                         <textarea
                           value={item.strengthApplication || ''}
@@ -2587,6 +2597,7 @@ const Writing: React.FC = () => {
                           className={styles.personalReflectionTextarea}
                           rows={4}
                           spellCheck={false}
+                          disabled={item.solutionCompleted}
                         />
                       </div>
 
@@ -2620,6 +2631,7 @@ const Writing: React.FC = () => {
                                         onClick={() => removeAiSolutionTag(item.id, solutionInput.id, 'strength', tag)}
                                         className={styles.chipRemoveButton}
                                         type="button"
+                                        disabled={item.solutionCompleted}
                                       >
                                         ×
                                       </button>
@@ -2637,6 +2649,7 @@ const Writing: React.FC = () => {
                                         onClick={() => removeAiSolutionTag(item.id, solutionInput.id, 'solution', category)}
                                         className={styles.solutionCategoryChipRemoveButton}
                                         type="button"
+                                        disabled={item.solutionCompleted}
                                       >
                                         ×
                                       </button>
@@ -2654,6 +2667,7 @@ const Writing: React.FC = () => {
                                         onClick={() => removeSelectedStrengthKeyword(solutionInput.id, keyword)}
                                         className={styles.chipRemoveButton}
                                         type="button"
+                                        disabled={item.solutionCompleted}
                                       >
                                         ×
                                       </button>
@@ -2675,6 +2689,7 @@ const Writing: React.FC = () => {
                                   className={styles.solutionTextarea}
                                   spellCheck={false}
                                   data-solution-id={solutionInput.id}
+                                  disabled={item.solutionCompleted}
                                 />
                               </div>
                               
@@ -2683,6 +2698,7 @@ const Writing: React.FC = () => {
                                 <button 
                                   onClick={() => removeSolutionInput(item.id, solutionInput.id)}
                                   className={styles.removeSolutionButton}
+                                  disabled={item.solutionCompleted}
                                 >
                                   ×
                                 </button>
@@ -2715,8 +2731,8 @@ const Writing: React.FC = () => {
                                           (selectedStrengthKeywords[solutionInput.id] || []).includes(keyword) 
                                             ? styles.strengthKeywordSelected 
                                             : ''
-                                        }`}
-                                        onClick={() => handleStrengthKeywordSelect(solutionInput.id, keyword)}
+                                        } ${item.solutionCompleted ? styles.disabled : ''}`}
+                                        onClick={() => !item.solutionCompleted && handleStrengthKeywordSelect(solutionInput.id, keyword)}
                                       >
                                         {keyword}
                                       </span>
@@ -2732,6 +2748,7 @@ const Writing: React.FC = () => {
                         <button 
                           onClick={() => addSolutionInput(item.id)}
                           className={styles.addSolutionButton}
+                          disabled={item.solutionCompleted}
                         >
                           + 조언 추가하기
                         </button>
@@ -2748,6 +2765,7 @@ const Writing: React.FC = () => {
                                 <button 
                                   onClick={() => removeSelectedAiSuggestion(item.id, suggestion)}
                                   className={styles.removeTagButton}
+                                  disabled={item.solutionCompleted}
                                 >
                                   ×
                                 </button>
@@ -2774,8 +2792,8 @@ const Writing: React.FC = () => {
                                   key={index} 
                                   className={`${styles.strengthKeyword} ${
                                     selectedStrengthTags.includes(keyword) ? styles.strengthKeywordSelected : ''
-                                  }`}
-                                  onClick={() => handleStrengthTagSelect(keyword)}
+                                  } ${item.solutionCompleted ? styles.disabled : ''}`}
+                                  onClick={() => !item.solutionCompleted && handleStrengthTagSelect(keyword)}
                                 >
                                   {keyword}
                                 </span>
@@ -2797,8 +2815,8 @@ const Writing: React.FC = () => {
                                   key={index}
                                   className={`${styles.solutionCategoryTag} ${
                                     selectedSolutionCategories.includes(category) ? styles.solutionCategoryTagSelected : ''
-                                  }`}
-                                  onClick={() => handleSolutionCategorySelect(category)}
+                                  } ${item.solutionCompleted ? styles.disabled : ''}`}
+                                  onClick={() => !item.solutionCompleted && handleSolutionCategorySelect(category)}
                                 >
                                   {category}
                                 </span>
@@ -2812,11 +2830,21 @@ const Writing: React.FC = () => {
                           <button 
                             className={styles.magicMixButton}
                             onClick={() => generateAiSolutions(item.id)}
-                            disabled={selectedStrengthTags.length === 0 && selectedSolutionCategories.length === 0 || isGeneratingAiSolutions}
+                            disabled={selectedStrengthTags.length === 0 && selectedSolutionCategories.length === 0 || isGeneratingAiSolutions || item.solutionCompleted}
                           >
                             {isGeneratingAiSolutions ? '🪄 마법의 솥이 끓고 있어요...' : '✨ 재료 섞어 새로운 솔루션 만들기 🪄'}
                           </button>
                         </div>
+                      </div>
+                      
+                      {/* 완료/수정 버튼 */}
+                      <div className={styles.solutionItemActions}>
+                        <button
+                          onClick={() => toggleSolutionCompleted(item.id)}
+                          className={styles.completeReflectionButton}
+                        >
+                          {item.solutionCompleted ? '수정하기' : '완료하기'}
+                        </button>
                       </div>
                       
                     </div>

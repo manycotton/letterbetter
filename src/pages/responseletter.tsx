@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import styles from '../styles/ResponseLetter.module.css';
-import { saveLetterContentData, saveResponseLetterData, getResponseLetterData } from '../../lib/database';
 
 interface ResponseLetterData {
   letter: string;
@@ -58,19 +57,39 @@ export default function ResponseLetter() {
       const strengthKeywords = JSON.parse(sessionStorage.getItem('strengthKeywords') || '[]');
       
       if (sessionId && letterData) {
-        await saveLetterContentData(sessionId, letterData.letter, strengthKeywords);
-        
-        // Update response letter data with final edited version
-        const originalResponseData = await getResponseLetterData(sessionId);
-        if (originalResponseData) {
-          await saveResponseLetterData(
+        // Save letter content data
+        await fetch('/api/writing-step/save-letter-content', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
             sessionId,
-            originalResponseData.originalGeneratedLetter,
-            letterData.letter, // final edited version
-            letterData.characterName,
-            letterData.userNickname,
-            originalResponseData.generatedAt
-          );
+            letterContent: letterData.letter,
+            strengthKeywords
+          })
+        });
+        
+        // Get original response letter data
+        const getResponse = await fetch(`/api/writing-step/get-response-letter?sessionId=${sessionId}`);
+        if (getResponse.ok) {
+          const { responseLetterData: originalResponseData } = await getResponse.json();
+          
+          // Update response letter data with final edited version
+          await fetch('/api/writing-step/save-response-letter', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              sessionId,
+              originalGeneratedLetter: originalResponseData.originalGeneratedLetter,
+              finalEditedLetter: letterData.letter, // final edited version
+              characterName: letterData.characterName,
+              userNickname: letterData.userNickname,
+              generatedAt: originalResponseData.generatedAt
+            })
+          });
         }
       }
     } catch (error) {
