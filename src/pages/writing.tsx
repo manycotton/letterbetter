@@ -1780,7 +1780,8 @@ const Writing: React.FC = () => {
       const validReflectionItems = reflectionItems.filter(item => 
         item.content.trim().length > 0 && 
         item.solutionInputs && 
-        item.solutionInputs.some(solution => solution.content.trim().length > 0)
+        Array.isArray(item.solutionInputs) &&
+        item.solutionInputs.some(solution => solution && solution.content && solution.content.trim().length > 0)
       );
 
       if (validReflectionItems.length === 0) {
@@ -1865,7 +1866,7 @@ const Writing: React.FC = () => {
           // Filter and format reflection items for database
           const formattedReflectionItems = validReflectionItems.map(item => ({
             ...item,
-            solutionIds: (item.solutionInputs || []).map(solution => solution.id),
+            solutionIds: (item.solutionInputs || []).map(solution => solution.id).filter(id => id),
             createdAt: item.createdAt || new Date().toISOString(),
             updatedAt: item.updatedAt || new Date().toISOString()
           }));
@@ -1901,7 +1902,7 @@ const Writing: React.FC = () => {
         if (sessionId) {
           const solutionsByReflection = validReflectionItems.map(item => ({
             reflectionId: item.id,
-            userSolutions: (item.solutionInputs || []).map(solution => ({
+            userSolutions: (item.solutionInputs || []).filter(solution => solution && solution.id && solution.content).map(solution => ({
               solutionId: solution.id,
               content: solution.content,
               isAiGenerated: !!solution.aiSolutionTags,
@@ -1937,7 +1938,7 @@ const Writing: React.FC = () => {
           const strengthTagsByReflection = validReflectionItems.map(item => ({
             reflectionId: item.id,
             aiStrengthTags: (item.solutionInputs || [])
-              .filter(solution => solution.aiSolutionTags?.strengthTags)
+              .filter(solution => solution && solution.aiSolutionTags?.strengthTags)
               .flatMap(solution => solution.aiSolutionTags?.strengthTags || []),
             generatedAt: new Date().toISOString(),
             timestamp: new Date().toISOString()
