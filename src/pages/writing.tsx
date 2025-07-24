@@ -2124,6 +2124,7 @@ const Writing: React.FC = () => {
                           // placeholder={`이 부분에서 ${characterName}이 어떤 어려움이나 문제를 겪고 있다고 생각하는지 적어주세요...`}
                           className={styles.explanationInput}
                           spellCheck={false}
+                          disabled={isUnderstandingCompleted}
                         />
                       </div>
                       
@@ -2144,6 +2145,7 @@ const Writing: React.FC = () => {
                           placeholder={`${characterName}의 고민에 공감되는 부분이나 비슷한 경험이 있다면 적어주세요...`}
                           className={styles.explanationInput}
                           spellCheck={false}
+                          disabled={isUnderstandingCompleted}
                         />
                       </div>
                       
@@ -2165,6 +2167,7 @@ const Writing: React.FC = () => {
                           placeholder={`${characterName}가 이 상황에서 어떤 감정을 느꼈을지 생각해보고 적어주세요...`}
                           className={styles.explanationInput}
                           spellCheck={false}
+                          disabled={isUnderstandingCompleted}
                         />
                       </div>
                     </div>
@@ -2255,6 +2258,7 @@ const Writing: React.FC = () => {
                           placeholder={`이 부분이 ${characterName}의 강점이라고 생각하는 이유를 적어주세요...`}
                           className={styles.explanationInput}
                           spellCheck={false}
+                          disabled={isStrengthCompleted}
                         />
                       </div>
                       
@@ -2275,6 +2279,7 @@ const Writing: React.FC = () => {
                           placeholder={`이 강점이 어디서/어떤 상황에서, 어떻게 잘 발휘될 수 있을지 적어주세요...`}
                           className={styles.explanationInput}
                           spellCheck={false}
+                          disabled={isStrengthCompleted}
                         />
                       </div>
                     </div>
