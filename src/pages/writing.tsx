@@ -2526,27 +2526,6 @@ const Writing: React.FC = () => {
                   + 새로운 고민 추가하기
                 </button>
 
-                {/* 디버그 로그 창 */}
-                {debugLogs.length > 0 && (
-                  <div className={styles.debugLogContainer}>
-                    <div className={styles.debugLogHeader}>
-                      <h4 className={styles.debugLogTitle}>🔍 검사 로그</h4>
-                      <button
-                        onClick={() => setDebugLogs([])}
-                        className={styles.clearLogButton}
-                      >
-                        지우기
-                      </button>
-                    </div>
-                    <div className={styles.debugLogContent}>
-                      {debugLogs.map((log, index) => (
-                        <div key={index} className={styles.debugLogItem}>
-                          {log}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           )}

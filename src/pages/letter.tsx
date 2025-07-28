@@ -298,18 +298,6 @@ const Letter: React.FC = () => {
               <p className={styles.characterJob}>
                 직업: {generatedLetter?.occupation || "프리랜서 디자이너"}
               </p>
-              {generatedLetter?.usedStrengths && (
-                <div className={styles.strengthsInfo}>
-                  <p className={styles.strengthsTitle}>🌟 사용된 강점:</p>
-                  <ul className={styles.strengthsList}>
-                    {generatedLetter.usedStrengths.map((strength, index) => (
-                      <li key={index} className={styles.strengthItem}>
-                        {strength}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
             </div>
           </div>
           <div className={styles.letterTextContainer}>
