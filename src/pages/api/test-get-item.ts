@@ -16,8 +16,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Get raw Redis data first
     const rawData = await redis.hgetall(`session_reflection:${testSessionId}`);
     console.log('Raw Redis data types:', {
-      blameCheckResult: typeof rawData.blameCheckResult,
-      emotionCheckResult: typeof rawData.emotionCheckResult
+      blameCheckResult: typeof rawData?.blameCheckResult,
+      emotionCheckResult: typeof rawData?.emotionCheckResult
     });
     
     // Get the reflection item using our function
@@ -34,12 +34,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({
       success: true,
       rawRedisTypes: {
-        blameCheckResult: typeof rawData.blameCheckResult,
-        emotionCheckResult: typeof rawData.emotionCheckResult
+        blameCheckResult: typeof rawData?.blameCheckResult,
+        emotionCheckResult: typeof rawData?.emotionCheckResult
       },
       rawRedisValues: {
-        blameCheckResult: rawData.blameCheckResult,
-        emotionCheckResult: rawData.emotionCheckResult
+        blameCheckResult: rawData?.blameCheckResult,
+        emotionCheckResult: rawData?.emotionCheckResult
       },
       retrievedItem: {
         id: item?.id,
@@ -54,7 +54,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Error in get item test:', error);
     return res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error instanceof Error ? error.message : String(error) : 'Unknown error',
       stack: error instanceof Error ? error.stack : 'No stack'
     });
   }

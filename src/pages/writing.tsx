@@ -798,11 +798,11 @@ const Writing: React.FC = () => {
   };
 
   // Helper function to prepare hint data for API calls
-  const prepareHintData = (items) => {
-    const selectedFactors = {};
-    const selectedHints = {};
+  const prepareHintData = (items: any) => {
+    const selectedFactors: any = {};
+    const selectedHints: any = {};
     
-    items.forEach(item => {
+    items.forEach((item: any) => {
       selectedFactors[item.id] = item.selectedFactors || [];
       selectedHints[item.id] = item.selectedHints || [];
     });
@@ -1131,6 +1131,8 @@ const Writing: React.FC = () => {
           body: JSON.stringify({
             reflectionContent: currentItem.content,
             originalLetter: letterParagraphs.join(' '),
+            reflectionId: itemId,
+            sessionId: sessionId,
           }),
         }),
         summarizeSituation(currentItem.content)
@@ -1176,6 +1178,8 @@ const Writing: React.FC = () => {
           reflectionContent: currentItem.content,
           originalLetter: letterParagraphs.join(' '),
           characterName: characterName,
+          reflectionId: itemId,
+          sessionId: sessionId,
         }),
       });
 
@@ -1826,39 +1830,6 @@ const Writing: React.FC = () => {
 
       const result = await response.json();
 
-      // Save suggestion data to database
-      try {
-        if (sessionId) {
-          const suggestionResults = validReflectionItems.map(item => ({
-            reflectionId: item.id,
-            warningText: item.blameCheckResult?.warning,
-            environmentalFactors: item.blameCheckResult?.environmentalFactors || []
-          }));
-          
-          // Collect all generated factors from all reflection items
-          const allGeneratedFactors = validReflectionItems.reduce((acc, item) => {
-            if (item.blameCheckResult?.environmentalFactors) {
-              acc.push(...item.blameCheckResult.environmentalFactors);
-            }
-            return acc;
-          }, [] as string[]);
-          
-          // Save suggestion data via API
-          await fetch('/api/writing-step/save-suggestion', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              sessionId,
-              suggestionResults,
-              allGeneratedFactors
-            })
-          });
-        }
-      } catch (error) {
-        console.error('Error saving suggestion data:', error);
-      }
 
       // Save reflection step data to database
       try {

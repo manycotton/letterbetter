@@ -111,7 +111,7 @@ ${index + 1}. 고민: ${item.problem}
     console.error('Error generating response letter:', error);
     res.status(500).json({
       error: '답장 생성 중 오류가 발생했습니다.',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      details: error instanceof Error ? error instanceof Error ? error.message : String(error) : 'Unknown error'
     });
   }
 }

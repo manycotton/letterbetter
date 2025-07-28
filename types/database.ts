@@ -240,18 +240,6 @@ export interface InspectionData {
   createdAt: string;
 }
 
-export interface SuggestionData {
-  id: string;
-  sessionId: string;
-  suggestionResults: {
-    reflectionId: string;
-    warningText?: string;
-    environmentalFactors: string[];
-  }[];
-  allGeneratedFactors: string[];
-  completedAt: string;
-  createdAt: string;
-}
 
 export interface LetterContentData {
   id: string;

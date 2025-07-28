@@ -1,5 +1,5 @@
 import redis from './upstash';
-import { User, LetterSession, HighlightedItem, StrengthItem, QuestionAnswers, ReflectionItem, GeneratedLetter, ReflectionHints, ReflectionSupportHints, StrengthAnalysisLog, WritingStepData, InspectionData, SuggestionData, LetterContentData, SolutionExplorationData, AIStrengthTagsData, MagicMixInteractionData, ResponseLetterData, UnderstandingSession, StrengthFindingSession, CleanHighlightedItem, CleanStrengthItem, Letter } from '../types/database';
+import { User, LetterSession, HighlightedItem, StrengthItem, QuestionAnswers, ReflectionItem, GeneratedLetter, ReflectionHints, ReflectionSupportHints, StrengthAnalysisLog, WritingStepData, InspectionData, LetterContentData, SolutionExplorationData, AIStrengthTagsData, MagicMixInteractionData, ResponseLetterData, UnderstandingSession, StrengthFindingSession, CleanHighlightedItem, CleanStrengthItem, Letter } from '../types/database';
 
 // 안전한 JSON 파싱 헬퍼 함수
 function safeJSONParse<T>(value: string | undefined | null, defaultValue: T): T {
@@ -1428,7 +1428,7 @@ export async function getReflectionItemHistory(reflectionId: string, sessionId?:
             selectedFactors: safeJSONParse(historyData.selectedFactors as string, []),
             inspectionStep: parseInt((historyData.inspectionStep as string) || '0'),
             emotionCheckResult: safeJSONParse(historyData.emotionCheckResult as string, null),
-            blameCheckResult: safeJSONParse(historyData.blameCheckResult as string, null),
+            blameCheckResult: safeJSONParse(historyData.blameCheckResult as string, null) || undefined,
             solutionIds: safeJSONParse(historyData.solutionIds as string, []),
             solutionCompleted: historyData.solutionCompleted === 'true',
             createdAt: (historyData.itemCreatedAt as string) || '',
@@ -1649,38 +1649,7 @@ export async function getInspectionData(sessionId: string): Promise<InspectionDa
   }
 }
 
-// Suggestion Data functions
-export async function saveSuggestionData(sessionId: string, suggestionResults: Array<{reflectionId: string; warningText?: string; environmentalFactors: string[]}>, allGeneratedFactors: string[]): Promise<SuggestionData> {
-  const suggestionDataId = `suggestion:${Date.now()}:${Math.random().toString(36).substring(2, 11)}`;
-  
-  const suggestionData: SuggestionData = {
-    id: suggestionDataId,
-    sessionId,
-    suggestionResults,
-    allGeneratedFactors,
-    completedAt: new Date().toISOString(),
-    createdAt: new Date().toISOString()
-  };
 
-  await redis.set(suggestionDataId, JSON.stringify(suggestionData));
-  await redis.set(`session_suggestion:${sessionId}`, suggestionDataId);
-  
-  return suggestionData;
-}
-
-export async function getSuggestionData(sessionId: string): Promise<SuggestionData | null> {
-  const suggestionDataId = await redis.get(`session_suggestion:${sessionId}`);
-  if (!suggestionDataId) return null;
-  
-  const suggestionData = await redis.get(suggestionDataId as string);
-  if (!suggestionData) return null;
-  
-  if (typeof suggestionData === 'object') {
-    return suggestionData as SuggestionData;
-  }
-  
-  return JSON.parse(suggestionData as string) as SuggestionData;
-}
 
 // Letter Content Data functions
 export async function saveLetterContentData(sessionId: string, letterContent: string, strengthKeywords: string[]): Promise<LetterContentData> {
@@ -1896,7 +1865,6 @@ export async function saveResponseLetterData(sessionId: string, originalGenerate
     createdAt: responseLetterData.createdAt
   });
   
-  await redis.set(`session_response_letter:${sessionId}`, responseLetterDataId);
   
   // 편지별 답장 데이터 연결 추가
   if (letterId) {
@@ -1906,25 +1874,6 @@ export async function saveResponseLetterData(sessionId: string, originalGenerate
   return responseLetterData;
 }
 
-export async function getResponseLetterData(sessionId: string): Promise<ResponseLetterData | null> {
-  const responseLetterDataId = await redis.get(`session_response_letter:${sessionId}`);
-  if (!responseLetterDataId) return null;
-  
-  const responseLetterHash = await redis.hgetall(responseLetterDataId as string);
-  if (!responseLetterHash || Object.keys(responseLetterHash).length === 0) return null;
-  
-  return {
-    id: responseLetterHash.id as string,
-    sessionId: responseLetterHash.sessionId as string,
-    originalGeneratedLetter: responseLetterHash.originalGeneratedLetter as string,
-    finalEditedLetter: responseLetterHash.finalEditedLetter as string,
-    characterName: responseLetterHash.characterName as string,
-    userNickname: responseLetterHash.userNickname as string,
-    generatedAt: responseLetterHash.generatedAt as string,
-    finalizedAt: responseLetterHash.finalizedAt as string,
-    createdAt: responseLetterHash.createdAt as string
-  };
-}
 
 // 편지별 답장 데이터 조회 함수
 export async function getResponseLetterByLetter(letterId: string): Promise<ResponseLetterData | null> {
@@ -1956,7 +1905,6 @@ export async function getWritingLogsByLetterId(letterId: string): Promise<{
   magicMixData: MagicMixInteractionData | null;
   solutionExploration: SolutionExplorationData | null;
   inspectionData: InspectionData | null;
-  suggestionData: SuggestionData | null;
   letterContentData: LetterContentData | null;
   aiStrengthTagsData: AIStrengthTagsData | null;
 }> {
@@ -1971,7 +1919,6 @@ export async function getWritingLogsByLetterId(letterId: string): Promise<{
       magicMixData: null,
       solutionExploration: null,
       inspectionData: null,
-      suggestionData: null,
       letterContentData: null,
       aiStrengthTagsData: null
     };
@@ -1986,7 +1933,6 @@ export async function getWritingLogsByLetterId(letterId: string): Promise<{
       magicMixData,
       solutionExploration,
       inspectionData,
-      suggestionData,
       letterContentData,
       aiStrengthTagsData
     ] = await Promise.all([
@@ -1997,7 +1943,6 @@ export async function getWritingLogsByLetterId(letterId: string): Promise<{
       getMagicMixInteractionData(sessionId),
       getSolutionExplorationData(sessionId),
       getInspectionData(sessionId),
-      getSuggestionData(sessionId),
       getLetterContentData(sessionId),
       getAIStrengthTagsData(sessionId)
     ]);
@@ -2010,7 +1955,6 @@ export async function getWritingLogsByLetterId(letterId: string): Promise<{
       magicMixData,
       solutionExploration,
       inspectionData,
-      suggestionData,
       letterContentData,
       aiStrengthTagsData
     };
@@ -2024,7 +1968,6 @@ export async function getWritingLogsByLetterId(letterId: string): Promise<{
       magicMixData: null,
       solutionExploration: null,
       inspectionData: null,
-      suggestionData: null,
       letterContentData: null,
       aiStrengthTagsData: null
     };
@@ -2040,7 +1983,6 @@ export async function getWritingLogsByLetter(letterId: string): Promise<{
   magicMixData: MagicMixInteractionData | null;
   solutionExploration: SolutionExplorationData | null;
   inspectionData: InspectionData | null;
-  suggestionData: SuggestionData | null;
   letterContentData: LetterContentData | null;
   aiStrengthTagsData: AIStrengthTagsData | null;
 }> {
@@ -2055,7 +1997,6 @@ export async function getWritingLogsByLetter(letterId: string): Promise<{
       magicMixData: null,
       solutionExploration: null,
       inspectionData: null,
-      suggestionData: null,
       letterContentData: null,
       aiStrengthTagsData: null
     };
@@ -2070,7 +2011,6 @@ export async function getWritingLogsByLetter(letterId: string): Promise<{
       magicMixData,
       solutionExploration,
       inspectionData,
-      suggestionData,
       letterContentData,
       aiStrengthTagsData
     ] = await Promise.all([
@@ -2081,7 +2021,6 @@ export async function getWritingLogsByLetter(letterId: string): Promise<{
       getMagicMixInteractionData(sessionId),
       getSolutionExplorationData(sessionId),
       getInspectionData(sessionId),
-      getSuggestionData(sessionId),
       getLetterContentData(sessionId),
       getAIStrengthTagsData(sessionId)
     ]);
@@ -2094,7 +2033,6 @@ export async function getWritingLogsByLetter(letterId: string): Promise<{
       magicMixData,
       solutionExploration,
       inspectionData,
-      suggestionData,
       letterContentData,
       aiStrengthTagsData
     };
@@ -2108,7 +2046,6 @@ export async function getWritingLogsByLetter(letterId: string): Promise<{
       magicMixData: null,
       solutionExploration: null,
       inspectionData: null,
-      suggestionData: null,
       letterContentData: null,
       aiStrengthTagsData: null
     };

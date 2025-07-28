@@ -30,7 +30,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   } catch (error) {
     console.error('Error saving answers:', error);
-    console.error('Error details:', error instanceof Error ? error.message : 'Unknown error', error instanceof Error ? error.stack : '');
-    res.status(500).json({ message: 'Internal server error', error: error instanceof Error ? error.message : 'Unknown error' });
+    console.error('Error details:', error instanceof Error ? error instanceof Error ? error.message : String(error) : 'Unknown error', error instanceof Error ? error.stack : '');
+    res.status(500).json({ message: 'Internal server error', error: error instanceof Error ? error instanceof Error ? error.message : String(error) : 'Unknown error' });
   }
 }

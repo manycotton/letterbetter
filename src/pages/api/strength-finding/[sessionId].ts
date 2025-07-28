@@ -27,7 +27,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Error fetching strength finding session:', error);
     res.status(500).json({ 
       message: 'Internal server error',
-      error: error.message 
+      error: error instanceof Error ? error.message : String(error) 
     });
   }
 }

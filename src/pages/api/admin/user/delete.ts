@@ -63,12 +63,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           }
         }
         
-        // Response letter 데이터 삭제 (hash storage)
-        const responseLetterDataId = await redis.get(`session_response_letter:${sessionId}`);
-        if (responseLetterDataId) {
-          await redis.del(responseLetterDataId as string);
-          await redis.del(`session_response_letter:${sessionId}`);
-        }
+        // Response letter 데이터는 letter_response:{letterId} 키로만 관리됨
         
         // Solution exploration 데이터 삭제
         await redis.del(`session_solution_exploration:${sessionId}`);

@@ -27,7 +27,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Error getting understanding session:', error);
     res.status(500).json({ 
       message: 'Internal server error',
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error instanceof Error ? error.message : String(error) : 'Unknown error'
     });
   }
 }

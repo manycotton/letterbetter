@@ -40,14 +40,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     
     if (selectedFactors && selectedHints) {
       // New format: separate factors and hints
-      selectedHintData = reflectionItems.map(item => ({
+      selectedHintData = reflectionItems.map((item: any) => ({
         reflectionId: item.id,
         selectedFactors: selectedFactors[item.id] || [],
         selectedHints: selectedHints[item.id] || []
       }));
     } else if (selectedHintTags) {
       // Legacy format: convert selectedHintTags to factors/hints split
-      selectedHintData = selectedHintTags.map(item => ({
+      selectedHintData = selectedHintTags.map((item: any) => ({
         reflectionId: item.reflectionId,
         selectedFactors: item.tags || [], // For now, treat all as factors until we have proper categorization
         selectedHints: []

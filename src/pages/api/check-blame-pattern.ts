@@ -1,4 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
+import { updateReflectionItem } from '../../../lib/database';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -6,7 +7,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { reflectionContent, originalLetter, characterName } = req.body;
+    const { reflectionContent, originalLetter, characterName, reflectionId, sessionId } = req.body;
 
     const prompt = `다음은 편지 원문과 사용자가 작성한 고민 정리 내용입니다:
 
@@ -100,24 +101,63 @@ JSON 형태로 응답해주세요.`;
     
     try {
       const result = JSON.parse(content);
+      
+      // 데이터베이스에 blameCheckResult 업데이트
+      if (reflectionId && sessionId) {
+        try {
+          await updateReflectionItem(reflectionId, sessionId, {
+            blameCheckResult: result
+          });
+        } catch (dbError) {
+          console.error('Error updating blame check result in database:', dbError);
+          // DB 업데이트 실패해도 결과는 반환
+        }
+      }
+      
       res.status(200).json(result);
     } catch (parseError) {
       // JSON 파싱 실패 시 기본값 반환
-      res.status(200).json({
+      const fallbackResult = {
         hasBlamePattern: false,
         warning: "",
         environmentalFactors: []
-      });
+      };
+      
+      // 데이터베이스에 fallback 결과 업데이트
+      if (reflectionId && sessionId) {
+        try {
+          await updateReflectionItem(reflectionId, sessionId, {
+            blameCheckResult: fallbackResult
+          });
+        } catch (dbError) {
+          console.error('Error updating fallback blame check result in database:', dbError);
+        }
+      }
+      
+      res.status(200).json(fallbackResult);
     }
 
   } catch (error) {
     console.error('Error checking blame pattern:', error);
     
     // 에러 시 기본값 반환
-    res.status(200).json({
+    const errorResult = {
       hasBlamePattern: false,
       warning: "",
       environmentalFactors: []
-    });
+    };
+    
+    // 데이터베이스에 에러 결과 업데이트
+    if (reflectionId && sessionId) {
+      try {
+        await updateReflectionItem(reflectionId, sessionId, {
+          blameCheckResult: errorResult
+        });
+      } catch (dbError) {
+        console.error('Error updating error blame check result in database:', dbError);
+      }
+    }
+    
+    res.status(200).json(errorResult);
   }
 }

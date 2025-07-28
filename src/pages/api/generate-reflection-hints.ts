@@ -128,7 +128,7 @@ ${highlightSummary}
     console.error('Error generating reflection hints:', error);
     res.status(500).json({ 
       message: 'Failed to generate reflection hints',
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error instanceof Error ? error.message : String(error) : 'Unknown error'
     });
   }
 }

@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getResponseLetterData } from '../../../../lib/database';
+import { getResponseLetterByLetter, getLetterSession } from '../../../../lib/database';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -7,15 +7,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { sessionId } = req.query;
+    const { letterId, sessionId } = req.query;
 
-    if (!sessionId || typeof sessionId !== 'string') {
+    if (!letterId && !sessionId) {
       return res.status(400).json({ 
-        message: 'Missing required parameter: sessionId' 
+        message: 'Missing required parameter: letterId or sessionId' 
       });
     }
 
-    const responseLetterData = await getResponseLetterData(sessionId);
+    let responseLetterData = null;
+    
+    if (letterId && typeof letterId === 'string') {
+      responseLetterData = await getResponseLetterByLetter(letterId);
+    } else if (sessionId && typeof sessionId === 'string') {
+      // Legacy support: find letter by sessionId and then get response
+      const session = await getLetterSession(sessionId);
+      if (session && session.letterId) {
+        responseLetterData = await getResponseLetterByLetter(session.letterId);
+      }
+    }
 
     if (!responseLetterData) {
       return res.status(404).json({ 
