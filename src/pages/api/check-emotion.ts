@@ -1,4 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
+import { updateReflectionItem } from '../../../lib/database';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -6,7 +7,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { reflectionContent, originalLetter } = req.body;
+    const { reflectionContent, originalLetter, reflectionId, sessionId } = req.body;
 
     const prompt = `Text to analyze: "${reflectionContent}"
 
@@ -55,22 +56,61 @@ Response format (JSON):
     
     try {
       const result = JSON.parse(content);
+      
+      // 데이터베이스에 emotionCheckResult 업데이트
+      if (reflectionId && sessionId) {
+        try {
+          await updateReflectionItem(reflectionId, sessionId, {
+            emotionCheckResult: result
+          });
+        } catch (dbError) {
+          console.error('Error updating emotion check result in database:', dbError);
+          // DB 업데이트 실패해도 결과는 반환
+        }
+      }
+      
       res.status(200).json(result);
     } catch (parseError) {
       // JSON 파싱 실패 시 기본값 반환
-      res.status(200).json({
+      const fallbackResult = {
         hasEmotion: false,
         suggestion: "이 상황에서 양양이 어떤 감정을 느꼈을지 생각해보고 추가해보세요. 예: '이런 상황에서 나는 좌절감을 느꼈다' 또는 '이로 인해 불안하고 걱정스러웠다'"
-      });
+      };
+      
+      // 데이터베이스에 fallback 결과 업데이트
+      if (reflectionId && sessionId) {
+        try {
+          await updateReflectionItem(reflectionId, sessionId, {
+            emotionCheckResult: fallbackResult
+          });
+        } catch (dbError) {
+          console.error('Error updating fallback emotion check result in database:', dbError);
+        }
+      }
+      
+      res.status(200).json(fallbackResult);
     }
 
   } catch (error) {
     console.error('Error checking emotion:', error);
     
     // 에러 시 기본값 반환
-    res.status(200).json({
+    const errorResult = {
       hasEmotion: false,
       suggestion: "이 상황에서 양양이 어떤 감정을 느꼈을지 생각해보고 추가해보세요."
-    });
+    };
+    
+    // 데이터베이스에 에러 결과 업데이트
+    if (reflectionId && sessionId) {
+      try {
+        await updateReflectionItem(reflectionId, sessionId, {
+          emotionCheckResult: errorResult
+        });
+      } catch (dbError) {
+        console.error('Error updating error emotion check result in database:', dbError);
+      }
+    }
+    
+    res.status(200).json(errorResult);
   }
 }

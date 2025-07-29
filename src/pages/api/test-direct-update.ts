@@ -56,10 +56,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           updatedAt: after?.updatedAt
         },
         rawRedisData: {
-          blameCheckResult: rawRedisData.blameCheckResult,
-          emotionCheckResult: rawRedisData.emotionCheckResult,
-          blameCheckResultType: typeof rawRedisData.blameCheckResult,
-          emotionCheckResultType: typeof rawRedisData.emotionCheckResult
+          blameCheckResult: rawRedisData?.blameCheckResult,
+          emotionCheckResult: rawRedisData?.emotionCheckResult,
+          blameCheckResultType: typeof rawRedisData?.blameCheckResult,
+          emotionCheckResultType: typeof rawRedisData?.emotionCheckResult
         }
       }
     });
@@ -68,7 +68,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error('Error in direct update test:', error);
     return res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error instanceof Error ? error.message : String(error) : 'Unknown error',
       stack: error instanceof Error ? error.stack : 'No stack'
     });
   }

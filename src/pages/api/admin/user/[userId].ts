@@ -12,7 +12,6 @@ import {
   MagicMixInteractionData, 
   SolutionExplorationData,
   InspectionData,
-  SuggestionData,
   LetterContentData,
   AIStrengthTagsData
 } from '../../../../../types/database';
@@ -107,7 +106,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         magicMixData: null,
         solutionExploration: null,
         inspectionData: null,
-        suggestionData: null,
         letterContentData: null,
         aiStrengthTagsData: null
       },

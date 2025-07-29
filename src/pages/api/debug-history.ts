@@ -39,7 +39,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(500).json({ 
       success: false, 
       error: 'Failed to debug history',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      details: error instanceof Error ? error instanceof Error ? error.message : String(error) : 'Unknown error'
     });
   }
 }

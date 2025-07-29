@@ -45,7 +45,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.status(500).json({ 
       success: false,
       message: 'Failed to save strength finding session',
-      error: error instanceof Error ? error.message : 'Unknown error' 
+      error: error instanceof Error ? error instanceof Error ? error.message : String(error) : 'Unknown error' 
     });
   }
 }
