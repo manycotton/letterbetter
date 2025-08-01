@@ -84,7 +84,7 @@ export default function ResponseLetter() {
             body: JSON.stringify({
               sessionId,
               originalGeneratedLetter: originalResponseData.originalGeneratedLetter,
-              finalEditedLetter: letterData.letter, // final edited version
+              finalEditedLetter: editedLetter, // final edited version
               characterName: letterData.characterName,
               userNickname: letterData.userNickname,
               generatedAt: originalResponseData.generatedAt
