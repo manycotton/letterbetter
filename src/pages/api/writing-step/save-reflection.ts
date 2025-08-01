@@ -38,13 +38,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Transform hint data for database storage - support both legacy and new format
     let selectedHintData = [];
     
-    if (selectedFactors && selectedHints) {
+    if (selectedFactors || selectedHints) {
       // New format: separate factors and hints
       selectedHintData = reflectionItems.map((item: any) => ({
         reflectionId: item.id,
-        selectedFactors: selectedFactors[item.id] || [],
-        selectedHints: selectedHints[item.id] || []
+        selectedFactors: selectedFactors?.[item.id] || [],
+        selectedHints: selectedHints?.[item.id] || []
       }));
+      console.log('Converted selectedHintData (new format):', selectedHintData);
     } else if (selectedHintTags) {
       // Legacy format: convert selectedHintTags to factors/hints split
       selectedHintData = selectedHintTags.map((item: any) => ({

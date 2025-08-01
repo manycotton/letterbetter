@@ -1883,8 +1883,8 @@ const Writing: React.FC = () => {
               solutionId: solution.id,
               content: solution.content,
               isAiGenerated: !!solution.aiSolutionTags,
-              selectedTags: solution.aiSolutionTags?.strengthTags || [],
-              strengthTags: solution.aiSolutionTags?.strengthTags || [],
+              selectedTags: selectedStrengthKeywords[solution.id] || [], // User-selected strength keywords
+              strengthTags: solution.aiSolutionTags?.strengthTags || [], // AI-generated strength tags
               solutionCategories: solution.aiSolutionTags?.solutionCategories || [],
               originalAiSolution: solution.aiSolutionTags ? solution.content : undefined,
               isModified: false, // TODO: track if user modified the solution

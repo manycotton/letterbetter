@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { updateReflectionItem } from '../../../lib/database';
+import { updateReflectionItemQuiet } from '../../../lib/database';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -60,7 +60,7 @@ Response format (JSON):
       // 데이터베이스에 emotionCheckResult 업데이트
       if (reflectionId && sessionId) {
         try {
-          await updateReflectionItem(reflectionId, sessionId, {
+          await updateReflectionItemQuiet(reflectionId, sessionId, {
             emotionCheckResult: result
           });
         } catch (dbError) {
@@ -80,7 +80,7 @@ Response format (JSON):
       // 데이터베이스에 fallback 결과 업데이트
       if (reflectionId && sessionId) {
         try {
-          await updateReflectionItem(reflectionId, sessionId, {
+          await updateReflectionItemQuiet(reflectionId, sessionId, {
             emotionCheckResult: fallbackResult
           });
         } catch (dbError) {

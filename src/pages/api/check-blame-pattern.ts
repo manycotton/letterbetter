@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { updateReflectionItem } from '../../../lib/database';
+import { updateReflectionItemQuiet } from '../../../lib/database';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -105,7 +105,7 @@ JSON 형태로 응답해주세요.`;
       // 데이터베이스에 blameCheckResult 업데이트
       if (reflectionId && sessionId) {
         try {
-          await updateReflectionItem(reflectionId, sessionId, {
+          await updateReflectionItemQuiet(reflectionId, sessionId, {
             blameCheckResult: result
           });
         } catch (dbError) {
@@ -126,7 +126,7 @@ JSON 형태로 응답해주세요.`;
       // 데이터베이스에 fallback 결과 업데이트
       if (reflectionId && sessionId) {
         try {
-          await updateReflectionItem(reflectionId, sessionId, {
+          await updateReflectionItemQuiet(reflectionId, sessionId, {
             blameCheckResult: fallbackResult
           });
         } catch (dbError) {
@@ -148,9 +148,10 @@ JSON 형태로 응답해주세요.`;
     };
     
     // 데이터베이스에 에러 결과 업데이트
+    const { reflectionId, sessionId } = req.body;
     if (reflectionId && sessionId) {
       try {
-        await updateReflectionItem(reflectionId, sessionId, {
+        await updateReflectionItemQuiet(reflectionId, sessionId, {
           blameCheckResult: errorResult
         });
       } catch (dbError) {

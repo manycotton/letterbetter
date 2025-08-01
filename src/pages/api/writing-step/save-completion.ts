@@ -22,6 +22,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         message: 'Completion history saved successfully',
         historyId
       });
+    } else if (action.includes('inspection') || action === 'inspection_refreshed') {
+      // Skipped for inspection actions - this is expected
+      res.status(200).json({ 
+        message: 'Completion history skipped for inspection action',
+        action
+      });
     } else {
       res.status(500).json({ 
         message: 'Failed to save completion history - function returned null'

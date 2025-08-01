@@ -45,6 +45,11 @@ export default function ResponseLetter() {
   };
 
   const handleSendLetter = async () => {
+    // Debug: Check what we're about to send
+    console.log('handleSendLetter called');
+    console.log('editedLetter state:', editedLetter);
+    console.log('editedLetter length:', editedLetter.length);
+    
     // 편지 완료 페이지로 이동하기 위한 데이터 저장
     const completeData = {
       characterName: letterData?.characterName || '뚜뚜',
@@ -121,6 +126,7 @@ export default function ResponseLetter() {
   };
 
   const handleLetterChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    console.log('handleLetterChange called, new value length:', e.target.value.length);
     setEditedLetter(e.target.value);
   };
 

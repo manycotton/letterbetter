@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getResponseLetterByLetter, getLetterSession } from '../../../../lib/database';
+import { getResponseLetterByLetter, getResponseLetterBySessionId } from '../../../../lib/database';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -20,11 +20,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (letterId && typeof letterId === 'string') {
       responseLetterData = await getResponseLetterByLetter(letterId);
     } else if (sessionId && typeof sessionId === 'string') {
-      // Legacy support: find letter by sessionId and then get response
-      const session = await getLetterSession(sessionId);
-      if (session && session.letterId) {
-        responseLetterData = await getResponseLetterByLetter(session.letterId);
-      }
+      // Get response letter directly by sessionId
+      responseLetterData = await getResponseLetterBySessionId(sessionId);
     }
 
     if (!responseLetterData) {
